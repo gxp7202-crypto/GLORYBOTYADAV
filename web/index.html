@@ -287,6 +287,34 @@ hr.sep{border:none;border-top:1px solid var(--stroke);margin:20px 0}
 .modal-card p{color:var(--txt-dim);font-size:13.5px;line-height:1.6;margin-bottom:22px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
 
+/* match play / glory */
+.glory-hero{background:linear-gradient(120deg,rgba(255,153,51,.15),rgba(31,174,100,.1));
+  border:1px solid rgba(255,153,51,.3);border-radius:var(--radius);padding:22px;margin-bottom:20px;
+  display:flex;gap:22px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.glory-hero .big{font-size:46px;font-weight:800;line-height:1;letter-spacing:-1px;
+  background:linear-gradient(90deg,var(--gold),var(--saffron));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.glory-hero .mini{display:flex;gap:26px;flex-wrap:wrap}
+.glory-hero .mini .v{font-size:23px;font-weight:800}
+.glory-hero .mini .k{color:var(--txt-dim);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;margin-bottom:4px}
+.grid-accts{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:14px}
+.acct{background:var(--panel);border:1px solid var(--stroke);border-radius:var(--radius);padding:16px;
+  display:flex;flex-direction:column;gap:11px;position:relative;overflow:hidden;transition:.2s;backdrop-filter:blur(14px)}
+.acct:hover{border-color:var(--stroke-2);transform:translateY(-2px)}
+.acct .rank{position:absolute;top:13px;right:15px;font-family:var(--mono);font-size:12px;color:var(--txt-faint)}
+.acct-top{display:flex;align-items:center;gap:11px;min-width:0}
+.acct .lvl{font-size:11px;color:var(--txt-dim);letter-spacing:1.4px;text-transform:uppercase;font-weight:700}
+.prog{height:9px;border-radius:20px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:5px}
+.prog > i{display:block;height:100%;border-radius:20px;background:linear-gradient(90deg,var(--saffron),var(--gold));
+  transition:width .7s cubic-bezier(.2,.9,.25,1);box-shadow:0 0 12px -2px rgba(255,153,51,.7)}
+.prog.hi > i{background:linear-gradient(90deg,var(--india-green),var(--cyan));box-shadow:0 0 12px -2px rgba(56,225,255,.7)}
+.arow{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--txt-dim)}
+.arow b{color:#fff;font-family:var(--mono);font-weight:600}
+.ab-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ab-pill{padding:9px 17px;border-radius:11px;border:1px solid var(--stroke-2);background:rgba(0,0,0,.3);
+  cursor:pointer;font-weight:700;font-size:12.5px;text-transform:capitalize;transition:.18s;user-select:none}
+.ab-pill:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
+.ab-pill.on{background:linear-gradient(135deg,var(--saffron),var(--gold));color:#150c02;border-color:transparent;box-shadow:0 10px 22px -10px rgba(255,153,51,.6)}
+
 /* mobile */
 .mobile-top{display:none}
 @media(max-width:900px){
@@ -350,11 +378,12 @@ let pollSlow = 0;
 
 const TABS = [
   {id:'dashboard', label:'Dashboard', icon:'📊'},
+  {id:'glory',     label:'Match Play', icon:'🔥'},
   {id:'create',    label:'Create Squad', icon:'➕'},
   {id:'guild',     label:'Guild Ops', icon:'🏰'},
   {id:'consoles',  label:'Consoles', icon:'💻'},
 ];
-const ICON_MAP = {dashboard:'📊',create:'➕',guild:'🏰',consoles:'💻'};
+const ICON_MAP = {dashboard:'📊',glory:'🔥',create:'➕',guild:'🏰',consoles:'💻'};
 
 /* ═══════════ HELPERS ═══════════ */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -471,6 +500,7 @@ function switchTab(t){
   tab=t; setActiveNav();
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(t==='dashboard'){ renderDashboard(true); pollTimer=setInterval(()=>renderDashboard(false),2500); }
+  else if(t==='glory'){ renderGlory(); pollTimer=setInterval(refreshGlory,2500); }
   else if(t==='create'){ renderCreate(); }
   else if(t==='guild'){ renderGuild(); pollTimer=setInterval(refreshGuild,2000); }
   else if(t==='consoles'){ renderConsoles(); pollTimer=setInterval(refreshConsoles,2000); }
@@ -743,6 +773,90 @@ async function loadConsole(sid){
   </div>`;
   const body=$id('consoleBody');
   if(body) body.scrollTop=body.scrollHeight;
+}
+
+/* ═══════════ MATCH PLAY / GLORY ═══════════ */
+function gloryHero(g){
+  return `<div class="glory-hero">
+    <div>
+      <div class="k" style="color:var(--txt-dim);font-size:11px;letter-spacing:1.8px;text-transform:uppercase;font-weight:700">Total Glory Earned</div>
+      <div class="big">${fmt(g.total_gained_exp)}</div>
+      <div style="color:var(--txt-dim);font-size:12.5px;margin-top:8px">EXP gained across ${fmt(g.total_accounts)} account(s)</div>
+    </div>
+    <div class="mini">
+      <div><div class="k">Glory / Hour</div><div class="v" style="color:var(--gold)">${fmt(g.exp_per_hour)}</div></div>
+      <div><div class="k">Total Matches</div><div class="v">${fmt(g.total_matches)}</div></div>
+      <div><div class="k">In Match Now</div><div class="v" style="color:var(--saffron)">${fmt(g.active_matches)}</div></div>
+    </div>
+  </div>`;
+}
+
+function antibanCard(ab){
+  if(!ab||!ab.ok) return '';
+  const opts = ab.available||['off','low','balanced','max'];
+  return `<div class="form-card">
+    <h3>🛡️ Anti-Ban Profile</h3>
+    <p class="hint">Slower play loop + periodic rests = far lower ban risk. Applies to every account live. Higher = safer, slower.</p>
+    <div class="ab-row">
+      ${opts.map(l=>`<div class="ab-pill ${ab.level===l?'on':''}" onclick="setAntiban('${l}')">${l}</div>`).join('')}
+    </div>
+    <p class="hint" style="margin:14px 0 0">Gap between matches: <b style="color:#fff">${ab.match_gap[0]}–${ab.match_gap[1]}s</b> · rest every <b style="color:#fff">${ab.rest_after||'—'}</b> matches${ab.rest_after?' ('+ab.rest[0]+'–'+ab.rest[1]+'s)':''}</p>
+  </div>`;
+}
+
+function acctCard(a, rank){
+  const pct = Math.max(0, Math.min(100, Number(a.progress_pct)||0));
+  const st = String(a.status||'STOPPED').toUpperCase();
+  const nd = Number(a.needed_for_level)||0;
+  return `<div class="acct">
+    <span class="rank">#${rank}</span>
+    <div class="acct-top">
+      <div class="avatar">${esc(initials(a.nickname))}</div>
+      <div style="min-width:0">
+        <div class="nick" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.nickname||'?')}</div>
+        <div class="uid">UID ${esc(a.uid)}</div>
+      </div>
+    </div>
+    <div class="arow" style="justify-content:flex-start;gap:8px">
+      ${statusBadge(st)}
+      ${a.is_paused?'<span class="badge b-connecting">PAUSED</span>':''}
+    </div>
+    <div>
+      <div class="arow"><span class="lvl">Level ${a.level} → ${a.next_level||(a.level+1)}</span><span>${pct}%</span></div>
+      <div class="prog hi"><i style="width:${pct}%"></i></div>
+      <div class="arow" style="margin-top:5px;font-size:11.5px"><span>${fmt(a.earned_in_level)} / ${fmt(nd)} EXP this level</span></div>
+    </div>
+    <div class="arow"><span>⚔️ Matches</span><b>${fmt(a.matches)}</b></div>
+    <div class="arow"><span>🔥 Glory gained</span><b style="color:var(--gold)">+${fmt(a.gained_exp)}</b></div>
+    <div class="arow"><span>⏳ To next level</span><b>${fmt(a.remaining_exp)}</b></div>
+    <div class="arow"><span>🏷️ ${esc(a.mode_label||a.mode||'Battle Royale')}</span><span>${esc(a.region||'')}</span></div>
+  </div>`;
+}
+
+async function renderGlory(){
+  const c=$id('content');
+  if(c && !c.querySelector('.glory-hero')) c.innerHTML = topbar('Match Play for Glory','Live level-up progress')+'<div class="shimmer" style="height:120px;margin-bottom:16px"></div>';
+  await refreshGlory();
+}
+
+async function refreshGlory(){
+  const [g, ab] = await Promise.all([api('/api/glory'), api('/api/antiban')]);
+  if(!g.ok) return;
+  const c=$id('content'); if(!c) return;
+  const accs = g.accounts||[];
+  c.innerHTML = topbar('Match Play for Glory','Live level-up progress')
+    + gloryHero(g)
+    + antibanCard(ab)
+    + `<div class="section-title"><span class="bar"></span>Glory Leaderboard</div>`
+    + (accs.length
+        ? `<div class="grid-accts">${accs.map((a,i)=>acctCard(a,i+1)).join('')}</div>`
+        : `<div class="empty"><span class="ei">🔥</span>No accounts playing yet.<br>Create a squad and hit <b>Start</b> to begin earning glory.</div>`);
+}
+
+async function setAntiban(lvl){
+  const r = await api('/api/antiban',{method:'POST',body:{level:lvl}});
+  r.ok ? toast('Anti-ban profile: '+lvl,'ok') : toast(r.error||'failed','err');
+  refreshGlory();
 }
 
 /* ═══════════ BOOT ═══════════ */

@@ -98,6 +98,19 @@ BYPASS_PACKET_JITTER  = True
 BYPASS_HELLO_DELAY    = True
 BYPASS_KA_JITTER      = True
 
+# ═══════════════════════════ ANTI-BAN HUMANIZER ═══════════════════════════
+# Profiles control how human-like the play loop behaves. Slower gap + periodic
+# rests dramatically reduce "robotic activity" flags. Switch via env ANTI_BAN_LEVEL.
+ANTI_BAN_PROFILES = {
+    "off":      {"match_gap": (3.0, 8.0),    "rest_after": 0,  "rest": (0, 0),     "afk_scale": 1.0, "move_scale": 1.0},
+    "low":      {"match_gap": (12.0, 40.0),  "rest_after": 20, "rest": (45, 120),  "afk_scale": 1.3, "move_scale": 1.15},
+    "balanced": {"match_gap": (25.0, 80.0),  "rest_after": 12, "rest": (60, 210),  "afk_scale": 1.6, "move_scale": 1.35},
+    "max":      {"match_gap": (50.0, 160.0), "rest_after": 6,  "rest": (180, 600), "afk_scale": 2.3, "move_scale": 1.75},
+}
+ANTI_BAN_LEVEL = os.environ.get("ANTI_BAN_LEVEL", "balanced").lower()
+if ANTI_BAN_LEVEL not in ANTI_BAN_PROFILES:
+    ANTI_BAN_LEVEL = "balanced"
+
 ENABLE_SPEED_MOVEMENT       = True
 MOVEMENT_SPEED_MIN          = 1.0
 MOVEMENT_SPEED_MAX          = 1.4
@@ -193,6 +206,43 @@ def bypass_ka_jitter(base=5.0):
 def bypass_human_reconnect_delay(attempt):
     if not (SAFE_PLAY_MODE and BYPASS_TIMING_JITTER): return min(attempt * 0.5, 2.0)
     return max(0.05, min(attempt * 0.5, 2.0) + random.uniform(-0.4, 0.7))
+
+def antiban_profile():
+    return ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["balanced"])
+
+_antiban_match_runs: Dict[str, int] = {}
+
+async def human_match_gap(uid=""):
+    """Randomised, human-like delay between matches with periodic long rests."""
+    p = antiban_profile()
+    lo, hi = p["match_gap"]
+    gap = random.uniform(lo, hi)
+    if random.random() < 0.28:            # occasional extra "went to get water" pause
+        gap += random.uniform(6.0, 30.0)
+    await asyncio.sleep(gap)
+    if p["rest_after"] > 0:
+        uid = str(uid)
+        _antiban_match_runs[uid] = _antiban_match_runs.get(uid, 0) + 1
+        if _antiban_match_runs[uid] % p["rest_after"] == 0:
+            rlo, rhi = p["rest"]
+            rest = random.uniform(rlo, rhi)
+            try:
+                bot_state.log_sync(uid, f"😴 Anti-ban rest for {int(rest)}s after {p['rest_after']} matches", "info")
+            except Exception:
+                pass
+            await asyncio.sleep(rest)
+
+def antiban_snapshot():
+    p = antiban_profile()
+    return {
+        "level": ANTI_BAN_LEVEL,
+        "match_gap": list(p["match_gap"]),
+        "rest_after": p["rest_after"],
+        "rest": list(p["rest"]),
+        "afk_scale": p["afk_scale"],
+        "move_scale": p["move_scale"],
+        "available": list(ANTI_BAN_PROFILES.keys()),
+    }
 
 # ═══════════════════════════ DEVICE ═══════════════════════════
 def get_device_for_account(account_identifier):
@@ -311,6 +361,12 @@ class BotState:
         self.guild_jobs: Dict[int, dict] = {}
         self._guild_job_lock = asyncio.Lock()
         self._guild_job_counter = 0
+        self.start_time: float = time.time()
+
+    def get_account_uptime(self, uid):
+        acc = self.accounts.get(str(uid))
+        if not acc: return 0
+        return max(0, int(time.time() - acc.get("added_at", self.start_time)))
 
     def _fmt_time(self):
         return datetime.now().strftime("%H:%M:%S")
@@ -1448,7 +1504,7 @@ async def movement_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
                 try: smx = max(0.7, min(float(sm), 1.6))
                 except Exception: smx = 1.0
                 wait = max(0.10, min(base / smx, 0.40))
-                wait = bypass_packet_jitter(wait, 0.20)
+                wait = bypass_packet_jitter(wait, 0.20) * antiban_profile()["move_scale"]
                 try: await asyncio.wait_for(stop_event.wait(), timeout=wait); break
                 except asyncio.TimeoutError: pass
             except asyncio.CancelledError: break
@@ -1481,7 +1537,7 @@ async def anti_afk_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
             try:
                 if await send_anti_afk_fire(sock, addr, udp_key_bytes, match_code, account_id): fires += 1
                 w = random.uniform(ANTI_AFK_MIN_INTERVAL, ANTI_AFK_MAX_INTERVAL)
-                w = bypass_packet_jitter(w, 0.25)
+                w = bypass_packet_jitter(w, 0.25) * antiban_profile()["afk_scale"]
                 try: await asyncio.wait_for(stop_event.wait(), timeout=w); break
                 except asyncio.TimeoutError: pass
             except asyncio.CancelledError: break
@@ -2181,7 +2237,7 @@ async def functional_battle_royale(runtime: SquadRuntime, addrs, starter_packet,
                                 try: writer.close(); await writer.wait_closed()
                                 except Exception: pass
                                 bot_state.squad_log(sid, f"🔁 {uid_str} restarting for new match...", "info")
-                                await asyncio.sleep(NEW_MATCH_DELAY)
+                                await human_match_gap(uid_str)
                                 reconnect_count_total += 1
                                 break
                             else:
@@ -2913,9 +2969,20 @@ class SquadManager:
                     "uid": uid,
                     "nickname": acc.get("nickname", "?"),
                     "level": acc.get("level", 1),
-                    "matches": acc.get("matches", 0),
+                    "matches": acc.get("matches_played", acc.get("matches", 0)),
                     "status": acc.get("status", "STOPPED"),
                     "guild_status": acc.get("guild_status", "—"),
+                    "region": acc.get("region", DEFAULT_REGION),
+                    "exp": acc.get("current_exp", 0),
+                    "gained_exp": acc.get("gained_exp", 0),
+                    "next_level": acc.get("next_level", acc.get("level", 1) + 1),
+                    "remaining_exp": acc.get("remaining_exp", 0),
+                    "progress_pct": acc.get("progress_pct", 0),
+                    "mode": acc.get("mode", "BR"),
+                    "mode_label": acc.get("mode_label", "Battle Royale"),
+                    "likes": acc.get("likes", 0),
+                    "is_paused": bot_state.is_paused(uid),
+                    "uptime": bot_state.get_account_uptime(uid),
                 })
             out.append({
                 "id": sid,
@@ -3401,15 +3468,87 @@ async def web_status(request):
     if chk: return chk
     squads = squad_mgr.get_squads()
     failed_uids = [uid for uid, a in bot_state.accounts.items() if a.get("guild_status") == "FAILED"]
+    total_gained = sum(a.get("gained_exp", 0) for a in bot_state.accounts.values())
+    uptime = max(1, int(time.time() - bot_state.start_time))
     return aioweb.json_response({
         "ok": True,
         "total_squads": len(squad_mgr.squads),
         "total_accounts": len(bot_state.accounts),
-        "total_matches": sum(a.get("matches",0) for a in bot_state.accounts.values()),
+        "total_matches": sum(a.get("matches_played", a.get("matches", 0)) for a in bot_state.accounts.values()),
         "active_workers": sum(1 for t in bot_state.account_workers.values() if not t.done()),
+        "total_gained_exp": total_gained,
+        "exp_per_hour": int((total_gained / uptime) * 3600),
+        "uptime": uptime,
         "squads": squads,
         "failed_uids": failed_uids,
     })
+
+async def web_glory(request):
+    """Match Play / Glory — full per-account progression for the glory leaderboard."""
+    chk = _require_admin(request)
+    if chk: return chk
+    accounts = []
+    for uid, a in bot_state.accounts.items():
+        accounts.append({
+            "uid": uid,
+            "nickname": a.get("nickname", f"Player_{str(uid)[:6]}"),
+            "region": a.get("region", DEFAULT_REGION),
+            "level": a.get("level", 1),
+            "next_level": a.get("next_level", a.get("level", 1) + 1),
+            "exp": a.get("current_exp", 0),
+            "gained_exp": a.get("gained_exp", 0),
+            "remaining_exp": a.get("remaining_exp", 0),
+            "target_exp": a.get("target_exp", 0),
+            "needed_for_level": a.get("needed_for_level", 1),
+            "earned_in_level": a.get("earned_in_level", 0),
+            "progress_pct": a.get("progress_pct", 0),
+            "likes": a.get("likes", 0),
+            "matches": a.get("matches_played", a.get("matches", 0)),
+            "status": a.get("status", "STOPPED"),
+            "mode": a.get("mode", "BR"),
+            "mode_label": a.get("mode_label", "Battle Royale"),
+            "is_paused": bot_state.is_paused(uid),
+            "uptime": bot_state.get_account_uptime(uid),
+            "squad_id": a.get("squad_id", 0),
+            "last_updated": a.get("last_updated", "—"),
+        })
+    accounts.sort(key=lambda x: x.get("gained_exp", 0), reverse=True)
+    total_gained = sum(a["gained_exp"] for a in accounts)
+    total_matches = sum(a["matches"] for a in accounts)
+    uptime = max(1, int(time.time() - bot_state.start_time))
+    active = sum(1 for a in accounts if str(a.get("status", "")).upper() == "IN_MATCH")
+    return aioweb.json_response({
+        "ok": True,
+        "brand": BRAND_NAME,
+        "total_accounts": len(accounts),
+        "total_gained_exp": total_gained,
+        "total_matches": total_matches,
+        "active_matches": active,
+        "exp_per_hour": int((total_gained / uptime) * 3600),
+        "uptime": uptime,
+        "accounts": accounts,
+    })
+
+async def web_antiban_get(request):
+    chk = _require_admin(request)
+    if chk: return chk
+    return aioweb.json_response({"ok": True, **antiban_snapshot()})
+
+async def web_antiban_set(request):
+    chk = _require_admin(request)
+    if chk: return chk
+    global ANTI_BAN_LEVEL
+    try:
+        body = await request.json()
+        lvl = str(body.get("level", "")).lower()
+        if lvl not in ANTI_BAN_PROFILES:
+            return aioweb.json_response({"ok": False, "error": "invalid level"})
+        ANTI_BAN_LEVEL = lvl
+        bot_state.log_sync("system", f"🛡️ Anti-ban profile switched to '{lvl}'", "warning")
+        return aioweb.json_response({"ok": True, "level": lvl})
+    except Exception as e:
+        return aioweb.json_response({"ok": False, "error": str(e)})
+
 
 async def web_squad_create(request):
     chk = _require_admin(request)
@@ -3623,6 +3762,9 @@ async def start_web_server():
         app.router.add_get("/healthz", web_health)
         app.router.add_post("/api/login", web_login)
         app.router.add_get("/api/status", web_status)
+        app.router.add_get("/api/glory", web_glory)
+        app.router.add_get("/api/antiban", web_antiban_get)
+        app.router.add_post("/api/antiban", web_antiban_set)
         app.router.add_post("/api/squad/create", web_squad_create)
         app.router.add_post("/api/squad/start", web_squad_start)
         app.router.add_post("/api/squad/restart", web_squad_restart)
