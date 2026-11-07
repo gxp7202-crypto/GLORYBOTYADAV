@@ -287,6 +287,17 @@ hr.sep{border:none;border-top:1px solid var(--stroke);margin:20px 0}
 .modal-card p{color:var(--txt-dim);font-size:13.5px;line-height:1.6;margin-bottom:22px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
 
+/* live strip */
+.live-strip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px;
+  background:linear-gradient(100deg,rgba(255,153,51,.1),rgba(56,225,255,.06));
+  border:1px solid var(--stroke-2);border-radius:14px;padding:11px 16px;backdrop-filter:blur(14px)}
+.live-strip .ls{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--txt-dim);
+  padding:4px 11px;border-radius:9px;background:rgba(0,0,0,.28);white-space:nowrap}
+.live-strip .ls b{color:#fff;font-family:var(--mono);font-weight:700}
+.live-strip .spacer{flex:1}
+.live-strip .ls-dead{background:rgba(255,77,94,.14);color:#ff9aa4}
+.live-strip .ls-clock{font-family:var(--mono);font-size:12.5px;color:var(--txt-dim);white-space:nowrap}
+
 /* match play / glory */
 .glory-hero{background:linear-gradient(120deg,rgba(255,153,51,.15),rgba(31,174,100,.1));
   border:1px solid rgba(255,153,51,.3);border-radius:var(--radius);padding:22px;margin-bottom:20px;
@@ -372,6 +383,7 @@ let token = localStorage.getItem('ylu_token') || '';
 let tab = 'dashboard';
 let pollTimer = null;
 let clockTimer = null;
+let globalTimer = null;
 let consoleSquad = null;
 let lastStatus = null;
 let pollSlow = 0;
@@ -444,7 +456,8 @@ function logout(silent){
   localStorage.removeItem('ylu_token'); token='';
   if(pollTimer) clearInterval(pollTimer);
   if(clockTimer) clearInterval(clockTimer);
-  pollTimer=clockTimer=null;
+  if(globalTimer) clearInterval(globalTimer);
+  pollTimer=clockTimer=globalTimer=null;
   $id('app').style.display='none';
   $id('login').style.display='flex';
   if(!silent) toast('Signed out','info');
@@ -475,13 +488,17 @@ function enterApp(){
           <button class="btn dng sm" style="width:100%;justify-content:center;margin-top:10px" onclick="logout()">🚪 Sign out</button>
         </div>
       </aside>
-      <main class="main" id="content"></main>
+      <main class="main">
+        <div class="live-strip" id="liveStrip"></div>
+        <div id="content"></div>
+      </main>
     </div>
     <nav class="bottom-nav">
       ${TABS.map(t=>`<div class="bn" data-tab="${t.id}" onclick="switchTab('${t.id}')">
         <span class="bi">${t.icon}</span>${t.label.split(' ')[0]}</div>`).join('')}
     </nav>`;
   startClock();
+  startGlobalPoll();
   switchTab('dashboard');
 }
 
@@ -773,6 +790,60 @@ async function loadConsole(sid){
   </div>`;
   const body=$id('consoleBody');
   if(body) body.scrollTop=body.scrollHeight;
+}
+
+/* ═══════════ GLOBAL LIVE STRIP ═══════════ */
+function animateTo(el,to){
+  if(!el) return;
+  to = Number(to)||0;
+  const from = Number(el.dataset.v||0);
+  if(from===to){ el.textContent = fmt(to); return; }
+  el.dataset.v = to;
+  const start = performance.now(), dur = 650;
+  const step = (t)=>{
+    const k = Math.min(1,(t-start)/dur);
+    const e = 1-Math.pow(1-k,3);
+    el.textContent = fmt(Math.round(from+(to-from)*e));
+    if(k<1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function renderLiveStrip(d){
+  const s = $id('liveStrip'); if(!s) return;
+  if(!s.dataset.init){
+    s.dataset.init = '1';
+    s.innerHTML = `<span class="live-pill" id="lsStatus" style="margin:0"><span class="dot" id="lsDot"></span><span id="lsStatusTxt">LIVE</span></span>
+      <span class="ls">👥 <b id="lsAcc">0</b> accounts</span>
+      <span class="ls">🔥 <b id="lsGlory">0</b> glory</span>
+      <span class="ls">⚔️ <b id="lsMatch">0</b> matches</span>
+      <span class="ls">⚙️ <b id="lsRun">0</b> workers</span>
+      <span class="ls">🛡️ <b id="lsMode">—</b></span>
+      <span class="spacer"></span>
+      <span class="ls-clock" id="lsClock">--:--:--</span>`;
+  }
+  const ok = !!(d && d.ok);
+  const st=$id('lsStatus'), txt=$id('lsStatusTxt'), dot=$id('lsDot');
+  if(st){ st.style.background = ok?'rgba(34,209,122,.09)':'rgba(255,77,94,.16)'; st.style.color = ok?'var(--good)':'#ff9aa4'; }
+  if(txt) txt.textContent = ok?'LIVE':'OFFLINE';
+  if(dot){ ok ? dot.classList.remove('off') : dot.classList.add('off'); }
+  const clk=$id('lsClock'); if(clk) clk.textContent = new Date().toLocaleTimeString('en-IN');
+  if(!ok) return;
+  animateTo($id('lsAcc'), d.total_accounts);
+  animateTo($id('lsGlory'), d.total_gained_exp);
+  animateTo($id('lsMatch'), d.total_matches);
+  animateTo($id('lsRun'), d.active_workers);
+}
+
+async function globalPoll(){
+  const [d, ab] = await Promise.all([api('/api/status'), api('/api/antiban')]);
+  renderLiveStrip(d);
+  const m=$id('lsMode'); if(m && ab && ab.ok) m.textContent = ab.level;
+}
+function startGlobalPoll(){
+  if(globalTimer) clearInterval(globalTimer);
+  globalPoll();
+  globalTimer = setInterval(globalPoll, 2000);
 }
 
 /* ═══════════ MATCH PLAY / GLORY ═══════════ */

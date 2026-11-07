@@ -102,10 +102,11 @@ BYPASS_KA_JITTER      = True
 # Profiles control how human-like the play loop behaves. Slower gap + periodic
 # rests dramatically reduce "robotic activity" flags. Switch via env ANTI_BAN_LEVEL.
 ANTI_BAN_PROFILES = {
-    "off":      {"match_gap": (3.0, 8.0),    "rest_after": 0,  "rest": (0, 0),     "afk_scale": 1.0, "move_scale": 1.0},
-    "low":      {"match_gap": (12.0, 40.0),  "rest_after": 20, "rest": (45, 120),  "afk_scale": 1.3, "move_scale": 1.15},
-    "balanced": {"match_gap": (25.0, 80.0),  "rest_after": 12, "rest": (60, 210),  "afk_scale": 1.6, "move_scale": 1.35},
-    "max":      {"match_gap": (50.0, 160.0), "rest_after": 6,  "rest": (180, 600), "afk_scale": 2.3, "move_scale": 1.75},
+    "off":      {"match_gap": (3.0, 8.0),    "rest_after": 0,  "rest": (0, 0),     "afk_scale": 1.0,  "move_scale": 1.0},
+    "fast":     {"match_gap": (8.0, 22.0),   "rest_after": 30, "rest": (30, 90),   "afk_scale": 1.15, "move_scale": 1.05},
+    "low":      {"match_gap": (12.0, 40.0),  "rest_after": 20, "rest": (45, 120),  "afk_scale": 1.3,  "move_scale": 1.15},
+    "balanced": {"match_gap": (25.0, 80.0),  "rest_after": 12, "rest": (60, 210),  "afk_scale": 1.6,  "move_scale": 1.35},
+    "max":      {"match_gap": (50.0, 160.0), "rest_after": 6,  "rest": (180, 600), "afk_scale": 2.3,  "move_scale": 1.75},
 }
 ANTI_BAN_LEVEL = os.environ.get("ANTI_BAN_LEVEL", "balanced").lower()
 if ANTI_BAN_LEVEL not in ANTI_BAN_PROFILES:
