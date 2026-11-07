@@ -112,6 +112,86 @@ ANTI_BAN_LEVEL = os.environ.get("ANTI_BAN_LEVEL", "balanced").lower()
 if ANTI_BAN_LEVEL not in ANTI_BAN_PROFILES:
     ANTI_BAN_LEVEL = "balanced"
 
+# ═══════════════════════════ NETWORK / PROXY ROTATION ═══════════════════════════
+# Every outbound request can rotate through a proxy pool so no single IP carries
+# all account traffic. Add proxies via env PROXY_LIST="http://user:pass@ip:port,..."
+# or drop them one-per-line into proxies.txt. Supports http(s):// and socks5://.
+PROXY_FILE = "proxies.txt"
+
+def _load_proxies():
+    import os as _os
+    out = [p.strip() for p in _os.environ.get("PROXY_LIST", "").split(",") if p.strip()]
+    if not out and _os.path.exists(PROXY_FILE):
+        try:
+            with open(PROXY_FILE, "r", encoding="utf-8") as f:
+                out = [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith("#")]
+        except Exception:
+            out = []
+    return out
+
+PROXY_LIST = _load_proxies()
+USE_PROXY = os.environ.get("USE_PROXY", "1" if PROXY_LIST else "0").lower() in ("1", "true", "yes", "on")
+_proxy_cycle = itertools.cycle(PROXY_LIST) if (PROXY_LIST and USE_PROXY) else None
+_proxy_index = {"i": 0}
+
+# httpx renamed `proxies=` -> `proxy=` in 0.27; support both.
+try:
+    _HTTPX_MAJOR_MINOR = tuple(int(x) for x in httpx.__version__.split(".")[:2])
+except Exception:
+    _HTTPX_MAJOR_MINOR = (0, 27)
+_HTTPX_PROXY_KW = "proxies" if _HTTPX_MAJOR_MINOR < (0, 26) else "proxy"
+
+def next_proxy():
+    if not _proxy_cycle:
+        return None
+    _proxy_index["i"] += 1
+    return next(_proxy_cycle)
+
+def _proxy_kwargs():
+    p = next_proxy()
+    return {_HTTPX_PROXY_KW: p} if p else {}
+
+def set_proxy_list(proxies, enabled=True, persist=True):
+    global PROXY_LIST, USE_PROXY, _proxy_cycle, _proxy_index
+    PROXY_LIST = [str(p).strip() for p in proxies if str(p).strip()]
+    USE_PROXY = bool(enabled)
+    _proxy_cycle = itertools.cycle(PROXY_LIST) if (PROXY_LIST and USE_PROXY) else None
+    _proxy_index = {"i": 0}
+    if persist:
+        try:
+            with open(PROXY_FILE, "w", encoding="utf-8") as f:
+                f.write("\n".join(PROXY_LIST) + ("\n" if PROXY_LIST else ""))
+        except Exception:
+            pass
+
+def _requests_proxies():
+    p = next_proxy()
+    return {"http": p, "https": p} if p else None
+
+# Optional API keys for third-party helper services (JWT/guild). Set via env.
+JWT_API_KEY = os.environ.get("JWT_API_KEY", "")
+GUILD_API_KEY = os.environ.get("GUILD_API_KEY", "")
+
+def network_snapshot():
+    masked = []
+    for p in PROXY_LIST:
+        try:
+            if "@" in p:
+                scheme, rest = p.split("://", 1)
+                creds, host = rest.split("@", 1)
+                user = creds.split(":", 1)[0]
+                masked.append(f"{scheme}://{user}:***@{host}")
+            else:
+                masked.append(p)
+        except Exception:
+            masked.append("***")
+    return {
+        "use_proxy": USE_PROXY,
+        "count": len(PROXY_LIST),
+        "proxies": masked,
+        "kwarg": _HTTPX_PROXY_KW,
+    }
+
 ENABLE_SPEED_MOVEMENT       = True
 MOVEMENT_SPEED_MIN          = 1.0
 MOVEMENT_SPEED_MAX          = 1.4
@@ -318,7 +398,7 @@ def optimize_udp_socket(sock):
 
 # ═══════════════════════════ HTTP CLIENT ═══════════════════════════
 client = httpx.AsyncClient(verify=False, timeout=10.0,
-    limits=httpx.Limits(max_connections=100, max_keepalive_connections=50))
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=50), **_proxy_kwargs())
 headers = {
     'User-Agent': 'UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)',
     'Connection': 'Keep-Alive', 'Accept-Encoding': 'gzip',
@@ -1751,7 +1831,7 @@ async def _process_social_packet(raw_bytes, account_data, tag="MAIN"):
                 "user-agent": "UnityPlayer/2022.3.47f1", "accept": "*/*",
                 "x-unity-version": "2022.3.47f1",
             }
-            async with httpx.AsyncClient(verify=False, timeout=8.0) as s:
+            async with httpx.AsyncClient(verify=False, timeout=8.0, **_proxy_kwargs()) as s:
                 r = await s.post(url, headers=hdrs, content=payload)
                 if r.status_code == 200 and len(r.content) > 0:
                     print_success(f"👥 [FRIEND-{tag}] ✅ {target}", str(own_id))
@@ -2451,7 +2531,9 @@ def guild_jwt_from_external_api(api_url: str, uid: str, password: str, retries: 
     for attempt in range(retries + 1):
         try:
             url = f"{api_url}?uid={uid}&password={password}"
-            resp = _requests.get(url, timeout=12, verify=False)
+            if JWT_API_KEY:
+                url += f"&key={JWT_API_KEY}"
+            resp = _requests.get(url, timeout=12, verify=False, proxies=_requests_proxies())
             if resp.status_code == 200:
                 data = resp.json()
                 token = (
@@ -2483,7 +2565,7 @@ def guild_send_friend_request(jwt: str, target_uid: int, retries: int = 1):
     for target_url in BD_FRIEND_URLS:
         for attempt in range(retries + 1):
             try:
-                resp = _requests.post(target_url, headers=headers, data=encrypted, timeout=10, verify=False)
+                resp = _requests.post(target_url, headers=headers, data=encrypted, timeout=10, verify=False, proxies=_requests_proxies())
                 if resp.status_code == 200: return True, resp.status_code, None
                 last_code = resp.status_code
                 last_err = f"HTTP_{resp.status_code}"
@@ -2703,7 +2785,7 @@ async def process_account_token(access_token, _skip_cache=False):
         if _requests is None: return None
         url = f"https://100067.connect.garena.com/oauth/token/inspect?token={access_token}"
         hdrs = {"User-Agent": "GarenaMSDK/4.0.19P4(G011A ;Android 9;en;US;)"}
-        resp = await asyncio.to_thread(_requests.get, url, headers=hdrs, timeout=10)
+        resp = await asyncio.to_thread(_requests.get, url, headers=hdrs, timeout=10, proxies=_requests_proxies())
         d = resp.json()
         if 'error' in d: return None
         oid = d.get('open_id'); pf = d.get('platform', 4)
@@ -3551,6 +3633,27 @@ async def web_antiban_set(request):
         return aioweb.json_response({"ok": False, "error": str(e)})
 
 
+async def web_network_get(request):
+    chk = _require_admin(request)
+    if chk: return chk
+    return aioweb.json_response({"ok": True, **network_snapshot()})
+
+async def web_network_set(request):
+    chk = _require_admin(request)
+    if chk: return chk
+    try:
+        body = await request.json()
+        proxies = body.get("proxies", [])
+        if isinstance(proxies, str):
+            proxies = [p.strip() for p in proxies.replace("\r", "").split("\n") if p.strip()]
+        enabled = bool(body.get("enabled", True))
+        set_proxy_list(proxies, enabled=enabled)
+        bot_state.log_sync("system", f"🌐 Proxy pool updated: {len(PROXY_LIST)} entries | enabled={USE_PROXY}", "info")
+        return aioweb.json_response({"ok": True, **network_snapshot()})
+    except Exception as e:
+        return aioweb.json_response({"ok": False, "error": str(e)})
+
+
 async def web_squad_create(request):
     chk = _require_admin(request)
     if chk: return chk
@@ -3766,6 +3869,8 @@ async def start_web_server():
         app.router.add_get("/api/glory", web_glory)
         app.router.add_get("/api/antiban", web_antiban_get)
         app.router.add_post("/api/antiban", web_antiban_set)
+        app.router.add_get("/api/network", web_network_get)
+        app.router.add_post("/api/network", web_network_set)
         app.router.add_post("/api/squad/create", web_squad_create)
         app.router.add_post("/api/squad/start", web_squad_start)
         app.router.add_post("/api/squad/restart", web_squad_restart)

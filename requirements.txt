@@ -1,8 +1,9 @@
-httpx
+httpx[socks]
 google-play-scraper
 pycryptodome
 protobuf-decoder
 protobuf
-requests
+requests[socks]
 aiohttp
 PyJWT
+PySocks

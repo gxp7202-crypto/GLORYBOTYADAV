@@ -3,6 +3,7 @@ token_cache.json
 accounts.json
 devices.json
 guild_exp_cache.json
+proxies.txt
 FREXY/
 *.log
 

@@ -325,6 +325,9 @@ hr.sep{border:none;border-top:1px solid var(--stroke);margin:20px 0}
   cursor:pointer;font-weight:700;font-size:12.5px;text-transform:capitalize;transition:.18s;user-select:none}
 .ab-pill:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
 .ab-pill.on{background:linear-gradient(135deg,var(--saffron),var(--gold));color:#150c02;border-color:transparent;box-shadow:0 10px 22px -10px rgba(255,153,51,.6)}
+.premium-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:6px}
+.premium-2col > .form-card{margin-bottom:0}
+@media(max-width:900px){.premium-2col{grid-template-columns:1fr}}
 
 /* mobile */
 .mobile-top{display:none}
@@ -910,14 +913,39 @@ async function renderGlory(){
   await refreshGlory();
 }
 
+function networkCard(net){
+  if(!net||!net.ok) return '';
+  return `<div class="form-card">
+    <h3>🌐 Proxy Rotation</h3>
+    <p class="hint">Rotate outbound traffic across a proxy pool so no single IP carries every account. One per line — <b>http://user:pass@ip:port</b> or <b>socks5://ip:port</b>. New requests pick these up instantly; the main login client refreshes on restart.</p>
+    <textarea class="inp" id="proxyBox" rows="4" spellcheck="false" style="font-family:var(--mono);font-size:12.5px;resize:vertical" placeholder="http://user:pass@1.2.3.4:8080&#10;socks5://5.6.7.8:1080">${esc((net.proxies||[]).join('\n'))}</textarea>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <label class="ab-pill ${net.use_proxy?'on':''}" id="proxyToggle" onclick="toggleProxy()">${net.use_proxy?'● Enabled':'○ Disabled'}</label>
+      <button class="btn info" id="proxySave" onclick="saveProxy()">💾 Save Pool</button>
+      <span class="hint" style="margin:0">${net.count} prox${net.count===1?'y':'ies'} loaded</span>
+    </div>
+  </div>`;
+}
+
+let proxyEnabled = true;
+async function toggleProxy(){ proxyEnabled=!proxyEnabled; const b=$id('proxyToggle'); if(b){ b.classList.toggle('on',proxyEnabled); b.textContent = proxyEnabled?'● Enabled':'○ Disabled'; } }
+async function saveProxy(){
+  const raw = ($id('proxyBox')||{}).value || '';
+  const proxies = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const r = await api('/api/network',{method:'POST',body:{proxies, enabled:proxyEnabled}});
+  r.ok ? toast('Proxy pool saved ('+r.count+')','ok') : toast(r.error||'failed','err');
+  refreshGlory();
+}
+
 async function refreshGlory(){
-  const [g, ab] = await Promise.all([api('/api/glory'), api('/api/antiban')]);
+  const [g, ab, net] = await Promise.all([api('/api/glory'), api('/api/antiban'), api('/api/network')]);
   if(!g.ok) return;
+  proxyEnabled = !!(net && net.ok && net.use_proxy);
   const c=$id('content'); if(!c) return;
   const accs = g.accounts||[];
   c.innerHTML = topbar('Match Play for Glory','Live level-up progress')
     + gloryHero(g)
-    + antibanCard(ab)
+    + `<div class="premium-2col">${antibanCard(ab)}${networkCard(net)}</div>`
     + `<div class="section-title"><span class="bar"></span>Glory Leaderboard</div>`
     + (accs.length
         ? `<div class="grid-accts">${accs.map((a,i)=>acctCard(a,i+1)).join('')}</div>`
