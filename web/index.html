@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#05060a">
+<title>YADAV LEVEL UP — Premium Control Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05060a;
+  --bg-2:#0a0c14;
+  --panel:rgba(18,21,33,.72);
+  --panel-solid:#11141f;
+  --stroke:rgba(255,255,255,.08);
+  --stroke-2:rgba(255,255,255,.14);
+  --txt:#eef1f8;
+  --txt-dim:#8b93a7;
+  --txt-faint:#565e73;
+  --saffron:#ff9933;
+  --india-green:#1fae64;
+  --gold:#ffcf5c;
+  --cyan:#38e1ff;
+  --violet:#8b7bff;
+  --red:#ff4d5e;
+  --orange:#ff8a3d;
+  --good:#22d17a;
+  --warn:#ffb02e;
+  --bad:#ff4d5e;
+  --radius:18px;
+  --radius-sm:12px;
+  --shadow:0 24px 60px -20px rgba(0,0,0,.85);
+  --glow:0 0 40px -8px rgba(255,153,51,.45);
+  --font:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--txt);font-family:var(--font);
+  min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+  letter-spacing:.1px;
+}
+::selection{background:rgba(255,153,51,.35);color:#fff}
+/* ═══ ambient background ═══ */
+#bg{position:fixed;inset:0;z-index:-2;overflow:hidden;background:
+  radial-gradient(1200px 700px at 12% -10%,rgba(255,153,51,.16),transparent 60%),
+  radial-gradient(1000px 600px at 100% 0%,rgba(56,225,255,.12),transparent 55%),
+  radial-gradient(900px 700px at 50% 120%,rgba(31,174,100,.14),transparent 60%),
+  linear-gradient(180deg,#05060a 0%,#070912 45%,#04050a 100%);}
+#bg .grid{position:absolute;inset:-2px;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(circle at 50% 30%,#000 0%,transparent 85%);
+  -webkit-mask-image:radial-gradient(circle at 50% 30%,#000 0%,transparent 85%);}
+#bg .orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.5;animation:float 18s ease-in-out infinite}
+#bg .o1{width:520px;height:520px;left:-140px;top:-120px;background:radial-gradient(circle,#ff9933,transparent 70%)}
+#bg .o2{width:460px;height:460px;right:-120px;top:8%;background:radial-gradient(circle,#38e1ff,transparent 70%);animation-delay:-6s}
+#bg .o3{width:560px;height:560px;left:40%;bottom:-220px;background:radial-gradient(circle,#1fae64,transparent 70%);animation-delay:-11s}
+@keyframes float{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(30px,-40px,0) scale(1.08)}}
+
+/* ═══ login ═══ */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:22px}
+.login-card{
+  width:100%;max-width:430px;background:var(--panel);backdrop-filter:blur(26px) saturate(140%);
+  -webkit-backdrop-filter:blur(26px);border:1px solid var(--stroke-2);border-radius:26px;
+  padding:40px 34px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  animation:rise .7s cubic-bezier(.2,.9,.25,1);
+}
+@keyframes rise{from{opacity:0;transform:translateY(26px) scale(.98)}to{opacity:1;transform:none}}
+.login-card::before{content:"";position:absolute;inset:0;border-radius:26px;padding:1px;
+  background:linear-gradient(135deg,rgba(255,153,51,.7),rgba(56,225,255,.35),transparent 60%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.brand-badge{width:74px;height:74px;border-radius:22px;margin:0 auto 18px;
+  display:grid;place-items:center;font-weight:900;font-size:30px;color:#05060a;
+  background:linear-gradient(135deg,var(--saffron),var(--gold) 55%,var(--india-green));
+  box-shadow:var(--glow);letter-spacing:-1px;position:relative}
+.brand-badge span{position:absolute;bottom:-9px;right:-9px;font-size:16px;
+  background:#0b0d16;border:1px solid var(--stroke-2);border-radius:50%;
+  width:26px;height:26px;display:grid;place-items:center}
+.login-card h1{font-size:26px;text-align:center;font-weight:800;letter-spacing:.5px;
+  background:linear-gradient(90deg,var(--saffron),var(--gold),var(--india-green));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.login-card .sub{text-align:center;color:var(--txt-dim);font-size:13px;margin:8px 0 26px;letter-spacing:2px;text-transform:uppercase}
+.field{position:relative;margin-bottom:14px}
+.field input{width:100%;padding:15px 16px 15px 46px;background:rgba(0,0,0,.35);
+  border:1px solid var(--stroke);border-radius:14px;color:var(--txt);font-size:15px;font-family:var(--font);
+  transition:.2s;outline:none}
+.field input:focus{border-color:var(--saffron);box-shadow:0 0 0 4px rgba(255,153,51,.14)}
+.field .ic{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--txt-faint);font-size:17px}
+.btn-primary{width:100%;padding:15px;border:none;border-radius:14px;cursor:pointer;
+  font-family:var(--font);font-weight:800;font-size:15px;letter-spacing:.6px;color:#05060a;
+  background:linear-gradient(135deg,var(--saffron),var(--gold));transition:.2s;margin-top:6px}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 30px -10px rgba(255,153,51,.6)}
+.btn-primary:active{transform:translateY(0)}
+.login-foot{text-align:center;color:var(--txt-faint);font-size:11.5px;margin-top:22px;letter-spacing:1.4px}
+
+/* ═══ shell ═══ */
+#app{display:none;min-height:100vh}
+.shell{display:flex;min-height:100vh}
+.sidebar{width:250px;flex-shrink:0;padding:22px 16px;display:flex;flex-direction:column;gap:6px;
+  background:linear-gradient(180deg,rgba(12,14,22,.85),rgba(8,9,15,.7));
+  border-right:1px solid var(--stroke);backdrop-filter:blur(20px);position:sticky;top:0;height:100vh}
+.side-brand{display:flex;align-items:center;gap:12px;padding:6px 8px 20px;border-bottom:1px solid var(--stroke);margin-bottom:14px}
+.side-brand .logo{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-weight:900;font-size:19px;
+  color:#05060a;background:linear-gradient(135deg,var(--saffron),var(--india-green));box-shadow:var(--glow)}
+.side-brand .nm{font-weight:800;font-size:15px;line-height:1.1}
+.side-brand .nm small{display:block;color:var(--txt-dim);font-weight:500;font-size:10.5px;letter-spacing:1.6px;margin-top:3px}
+.nav-item{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:13px;cursor:pointer;
+  color:var(--txt-dim);font-weight:600;font-size:14px;transition:.18s;border:1px solid transparent;user-select:none}
+.nav-item .ni{width:20px;text-align:center;font-size:16px}
+.nav-item:hover{background:rgba(255,255,255,.045);color:var(--txt)}
+.nav-item.active{background:linear-gradient(100deg,rgba(255,153,51,.18),rgba(255,153,51,.04));
+  color:#fff;border-color:rgba(255,153,51,.35)}
+.nav-item.active .ni{filter:drop-shadow(0 0 8px rgba(255,153,51,.7))}
+.side-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--stroke)}
+.live-pill{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:11px;font-size:12px;
+  background:rgba(34,209,122,.09);color:var(--good);font-weight:700;letter-spacing:.5px;margin-bottom:10px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px var(--good);animation:pulse 1.6s infinite}
+.dot.off{background:var(--txt-faint);box-shadow:none;animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.main{flex:1;min-width:0;padding:26px 30px 60px;max-width:1400px;margin:0 auto}
+.topbar{display:flex;align-items:center;gap:16px;margin-bottom:26px;flex-wrap:wrap}
+.topbar h2{font-size:25px;font-weight:800;letter-spacing:.3px}
+.topbar .crumb{color:var(--txt-dim);font-size:13px;margin-top:3px}
+.topbar .spacer{flex:1}
+.clock{font-family:var(--mono);font-size:13px;color:var(--txt-dim);padding:9px 14px;border-radius:11px;
+  background:rgba(0,0,0,.35);border:1px solid var(--stroke);white-space:nowrap}
+
+/* ═══ cards / stats ═══ */
+.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:26px}
+.stat{position:relative;background:var(--panel);border:1px solid var(--stroke);border-radius:var(--radius);
+  padding:20px;backdrop-filter:blur(14px);overflow:hidden;transition:.22s}
+.stat:hover{transform:translateY(-3px);border-color:var(--stroke-2)}
+.stat::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;
+  background:linear-gradient(90deg,var(--saffron),var(--gold));opacity:.85}
+.stat.g::after{background:linear-gradient(90deg,var(--india-green),var(--cyan))}
+.stat.c::after{background:linear-gradient(90deg,var(--cyan),var(--violet))}
+.stat.v::after{background:linear-gradient(90deg,var(--violet),var(--saffron))}
+.stat .lbl{color:var(--txt-dim);font-size:12px;letter-spacing:1.6px;text-transform:uppercase;font-weight:600}
+.stat .num{font-size:38px;font-weight:800;margin-top:8px;line-height:1;
+  background:linear-gradient(90deg,#fff,#c9d2e8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat .ico{position:absolute;right:16px;top:16px;font-size:22px;opacity:.5}
+
+.section-title{display:flex;align-items:center;gap:11px;font-size:16px;font-weight:700;margin:8px 0 16px}
+.section-title .bar{width:4px;height:18px;border-radius:3px;background:linear-gradient(var(--saffron),var(--india-green))}
+
+/* ═══ squad ═══ */
+.squad-card{background:var(--panel);border:1px solid var(--stroke);border-radius:var(--radius);
+  padding:20px;margin-bottom:18px;backdrop-filter:blur(14px);position:relative;overflow:hidden;
+  animation:rise .45s ease both}
+.squad-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(var(--saffron),var(--india-green))}
+.sq-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.sq-head h3{font-size:17px;font-weight:800;display:flex;align-items:center;gap:10px}
+.sq-head .spacer{flex:1}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.slot{background:rgba(0,0,0,.32);border:1px dashed var(--stroke-2);border-radius:var(--radius-sm);
+  padding:14px;min-height:92px;display:flex;flex-direction:column;gap:7px;transition:.2s}
+.slot.filled{border-style:solid;border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.028)}
+.slot.empty{align-items:center;justify-content:center;color:var(--txt-faint);font-size:13px}
+.slot-top{display:flex;align-items:center;gap:9px}
+.avatar{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:13px;color:#05060a;
+  background:linear-gradient(135deg,var(--cyan),var(--violet));flex-shrink:0}
+.slot .nick{font-weight:700;font-size:14px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .uid{color:var(--txt-faint);font-family:var(--mono);font-size:11px}
+.slot .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--txt-dim)}
+.slot-actions{display:flex;gap:6px;margin-top:auto}
+
+/* badges */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;
+  font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase}
+.badge .bd{width:6px;height:6px;border-radius:50%}
+.b-online{background:rgba(34,209,122,.15);color:var(--good)}.b-online .bd{background:var(--good);box-shadow:0 0 8px var(--good)}
+.b-inmatch{background:rgba(255,153,51,.16);color:var(--saffron)}.b-inmatch .bd{background:var(--saffron)}
+.b-connecting{background:rgba(255,176,46,.16);color:var(--warn)}.b-connecting .bd{background:var(--warn)}
+.b-error{background:rgba(255,77,94,.16);color:var(--bad)}.b-error .bd{background:var(--bad)}
+.b-stopped,.b-offline{background:rgba(139,147,167,.14);color:var(--txt-dim)}.b-stopped .bd,.b-offline .bd{background:var(--txt-faint)}
+.b-running{background:rgba(34,209,122,.15);color:var(--good)}
+.b-success{background:rgba(34,209,122,.15);color:var(--good)}
+.b-failed{background:rgba(255,77,94,.15);color:var(--bad)}
+.b-pending{background:rgba(139,147,167,.14);color:var(--txt-dim)}
+
+/* buttons */
+.btn{border:1px solid var(--stroke-2);background:rgba(255,255,255,.05);color:var(--txt);
+  padding:9px 15px;border-radius:11px;font-family:var(--font);font-weight:700;font-size:13px;cursor:pointer;transition:.18s;
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{background:rgba(255,255,255,.11);transform:translateY(-1px)}
+.btn:active{transform:none}
+.btn.sm{padding:7px 11px;font-size:12px;border-radius:9px}
+.btn.xs{padding:6px 9px;font-size:12px;border-radius:9px}
+.btn.go{background:linear-gradient(135deg,var(--india-green),#17c06f);border:none;color:#04120a}
+.btn.go:hover{box-shadow:0 12px 24px -10px rgba(34,209,122,.6)}
+.btn.warn{background:linear-gradient(135deg,var(--saffron),var(--gold));border:none;color:#150c02}
+.btn.warn:hover{box-shadow:0 12px 24px -10px rgba(255,153,51,.6)}
+.btn.dng{background:rgba(255,77,94,.14);border:1px solid rgba(255,77,94,.4);color:#ff8b96}
+.btn.dng:hover{background:rgba(255,77,94,.24)}
+.btn.info{background:linear-gradient(135deg,var(--cyan),#22a9d6);border:none;color:#02121a}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
+
+/* forms */
+.form-card{background:var(--panel);border:1px solid var(--stroke);border-radius:var(--radius);
+  padding:22px;backdrop-filter:blur(14px);margin-bottom:18px}
+.form-card h3{font-size:16px;font-weight:800;margin-bottom:6px;display:flex;gap:9px;align-items:center}
+.form-card .hint{color:var(--txt-dim);font-size:12.5px;margin-bottom:18px;line-height:1.5}
+.inp,select.inp{width:100%;padding:12px 14px;background:rgba(0,0,0,.35);border:1px solid var(--stroke);
+  border-radius:12px;color:var(--txt);font-size:14px;font-family:var(--font);transition:.18s;outline:none}
+.inp:focus{border-color:var(--saffron);box-shadow:0 0 0 4px rgba(255,153,51,.12)}
+select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b93a7'%3E%3Cpath d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center}
+.member-row{display:grid;grid-template-columns:64px 1fr 1fr;gap:10px;align-items:center;margin-bottom:10px}
+.member-row .sl{color:var(--txt-faint);font-size:12px;font-weight:800;letter-spacing:.5px}
+.form-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.form-4col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+hr.sep{border:none;border-top:1px solid var(--stroke);margin:20px 0}
+.label{font-size:11.5px;color:var(--txt-dim);letter-spacing:1.2px;text-transform:uppercase;font-weight:700;margin-bottom:7px;display:block}
+
+/* console */
+.console-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.console{background:#04050a;border:1px solid var(--stroke);border-radius:var(--radius);overflow:hidden;
+  box-shadow:var(--shadow)}
+.console-top{display:flex;align-items:center;gap:8px;padding:11px 15px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--stroke)}
+.console-top .td{width:11px;height:11px;border-radius:50%}
+.console-top .t1{background:#ff5f57}.console-top .t2{background:#febc2e}.console-top .t3{background:#28c840}
+.console-top .ttl{font-family:var(--mono);font-size:12px;color:var(--txt-dim);margin-left:8px}
+.console-body{height:460px;overflow-y:auto;padding:16px;font-family:var(--mono);font-size:12.5px;line-height:1.65}
+.console-body::-webkit-scrollbar{width:9px}.console-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:9px}
+.log-line{display:flex;gap:11px;padding:1px 0;border-radius:4px}
+.log-line:hover{background:rgba(255,255,255,.03)}
+.log-line .t{color:var(--txt-faint);flex-shrink:0}
+.log-line .m{word-break:break-word}
+.log-line.success .m{color:var(--good)}
+.log-line.error .m{color:var(--bad)}
+.log-line.warning .m{color:var(--warn)}
+.log-line.info .m{color:var(--cyan)}
+.cursor{display:inline-block;width:8px;height:14px;background:var(--saffron);margin-left:4px;
+  animation:blink 1s steps(1) infinite;vertical-align:-2px}
+@keyframes blink{50%{opacity:0}}
+
+/* guild results */
+.guild-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-top:14px}
+.gitem{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-left:3px solid var(--txt-faint);
+  border-radius:10px;padding:11px 13px;font-size:12.5px}
+.gitem.ok{border-left-color:var(--good)}.gitem.fail{border-left-color:var(--bad)}
+.gitem .u{font-weight:800;color:#fff;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.gitem .m{color:var(--txt-dim);font-size:11.5px;margin-top:6px;word-break:break-word;line-height:1.5}
+
+/* misc */
+.alert{border-radius:14px;padding:15px 17px;margin:14px 0;font-size:13.5px;display:flex;gap:12px;align-items:flex-start;border:1px solid}
+.alert .ai{font-size:17px;line-height:1}
+.alert.red{background:rgba(255,77,94,.08);border-color:rgba(255,77,94,.35);color:#ff9aa4}
+.alert.green{background:rgba(34,209,122,.08);border-color:rgba(34,209,122,.32);color:#7ef0b4}
+.alert.info{background:rgba(56,225,255,.07);border-color:rgba(56,225,255,.3);color:#9ae9ff}
+.empty{text-align:center;color:var(--txt-faint);padding:50px 20px;font-size:14px}
+.empty .ei{font-size:44px;opacity:.4;display:block;margin-bottom:14px}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:var(--saffron);
+  border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.shimmer{height:100px;border-radius:14px;background:linear-gradient(100deg,rgba(255,255,255,.03) 30%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.03) 70%);
+  background-size:200% 100%;animation:shim 1.3s infinite}
+@keyframes shim{to{background-position:-200% 0}}
+
+/* toasts */
+#toasts{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;max-width:360px}
+.toast{background:rgba(16,19,30,.96);backdrop-filter:blur(18px);border:1px solid var(--stroke-2);
+  border-left:3px solid var(--saffron);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow);
+  animation:slideIn .35s cubic-bezier(.2,.9,.25,1);font-size:13.5px;display:flex;gap:11px;align-items:flex-start}
+.toast.ok{border-left-color:var(--good)}.toast.err{border-left-color:var(--bad)}.toast.warn{border-left-color:var(--warn)}
+.toast .ti{font-size:16px;line-height:1.2}
+.toast.out{animation:slideOut .3s forwards}
+@keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes slideOut{to{opacity:0;transform:translateX(40px)}}
+
+/* modal */
+#modal{position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;padding:20px;
+  background:rgba(2,3,7,.7);backdrop-filter:blur(6px)}
+#modal.show{display:flex}
+.modal-card{width:100%;max-width:400px;background:var(--panel-solid);border:1px solid var(--stroke-2);
+  border-radius:20px;padding:26px;box-shadow:var(--shadow);animation:rise .3s ease}
+.modal-card h4{font-size:17px;margin-bottom:10px}
+.modal-card p{color:var(--txt-dim);font-size:13.5px;line-height:1.6;margin-bottom:22px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end}
+
+/* mobile */
+.mobile-top{display:none}
+@media(max-width:900px){
+  .sidebar{display:none}
+  .main{padding:18px 16px 96px}
+  .mobile-top{display:flex;align-items:center;gap:12px;padding:14px 16px;position:sticky;top:0;z-index:50;
+    background:rgba(6,7,12,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--stroke)}
+  .mobile-top .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:900;color:#05060a;
+    background:linear-gradient(135deg,var(--saffron),var(--india-green))}
+  .mobile-top .nm{font-weight:800;font-size:15px}
+  .mobile-top .spacer{flex:1}
+  .bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:60;
+    background:rgba(8,10,17,.94);backdrop-filter:blur(22px);border-top:1px solid var(--stroke);
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  .bottom-nav .bn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:11px;
+    color:var(--txt-dim);font-size:10px;font-weight:700;cursor:pointer}
+  .bottom-nav .bn .bi{font-size:18px}
+  .bottom-nav .bn.active{color:var(--saffron);background:rgba(255,153,51,.1)}
+  .form-3col,.form-4col{grid-template-columns:1fr 1fr}
+}
+@media(max-width:560px){
+  .form-2col,.form-3col,.form-4col{grid-template-columns:1fr}
+  .member-row{grid-template-columns:44px 1fr 1fr}
+  .topbar h2{font-size:21px}
+  .stat .num{font-size:30px}
+}
+@media(min-width:901px){.bottom-nav{display:none}}
+</style>
+</head>
+<body>
+<div id="bg"><div class="grid"></div><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+<div id="toasts"></div>
+<div id="modal"></div>
+
+<div id="login">
+  <div class="login-card">
+    <div class="brand-badge">Y<span>🇮🇳</span></div>
+    <h1>YADAV LEVEL UP</h1>
+    <div class="sub">Premium Control Center</div>
+    <div class="field"><span class="ic">🔐</span>
+      <input type="password" id="pw" placeholder="Enter admin password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-primary" id="loginBtn" onclick="doLogin()">UNLOCK DASHBOARD</button>
+    <div class="login-foot">SQUAD • GUILD • LEVEL UP ENGINE</div>
+  </div>
+</div>
+
+<div id="app"></div>
+
+<script>
+/* ═══════════ CONFIG / STATE ═══════════ */
+const API = window.location.origin;
+const BRAND = 'YADAV LEVEL UP';
+let token = localStorage.getItem('ylu_token') || '';
+let tab = 'dashboard';
+let pollTimer = null;
+let clockTimer = null;
+let consoleSquad = null;
+let lastStatus = null;
+let pollSlow = 0;
+
+const TABS = [
+  {id:'dashboard', label:'Dashboard', icon:'📊'},
+  {id:'create',    label:'Create Squad', icon:'➕'},
+  {id:'guild',     label:'Guild Ops', icon:'🏰'},
+  {id:'consoles',  label:'Consoles', icon:'💻'},
+];
+const ICON_MAP = {dashboard:'📊',create:'➕',guild:'🏰',consoles:'💻'};
+
+/* ═══════════ HELPERS ═══════════ */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function $id(x){return document.getElementById(x);}
+function initials(name){name=String(name||'?');return name.replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase()||'??';}
+function fmt(n){n=Number(n)||0;return n.toLocaleString('en-IN');}
+
+async function api(path, opts={}){
+  opts.headers = opts.headers || {};
+  if(token) opts.headers['X-Admin-Token'] = token;
+  if(opts.body && typeof opts.body!=='string'){opts.body=JSON.stringify(opts.body);opts.headers['Content-Type']='application/json';}
+  try{
+    const r = await fetch(API+path, opts);
+    const j = await r.json().catch(()=>({ok:false,error:'bad json'}));
+    if(r.status===401){ logout(true); }
+    return j;
+  }catch(e){ return {ok:false,error:'network error'}; }
+}
+
+function toast(msg, type='info'){
+  const t = document.createElement('div');
+  t.className = 'toast '+(type==='ok'?'ok':type==='err'?'err':type==='warn'?'warn':'');
+  const ic = type==='ok'?'✅':type==='err'?'⛔':type==='warn'?'⚠️':'ℹ️';
+  t.innerHTML = `<span class="ti">${ic}</span><span>${esc(msg)}</span>`;
+  $id('toasts').appendChild(t);
+  setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),300);},3600);
+}
+
+function confirmBox(title, text){
+  return new Promise(res=>{
+    const m = $id('modal');
+    m.innerHTML = `<div class="modal-card">
+      <h4>${esc(title)}</h4><p>${esc(text)}</p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="mcNo">Cancel</button>
+        <button class="btn dng" id="mcYes">Yes, continue</button>
+      </div></div>`;
+    m.classList.add('show');
+    const close = v=>{m.classList.remove('show');m.innerHTML='';res(v);};
+    $id('mcNo').onclick=()=>close(false);
+    $id('mcYes').onclick=()=>close(true);
+    m.onclick=e=>{if(e.target===m)close(false);};
+  });
+}
+
+/* ═══════════ AUTH ═══════════ */
+async function doLogin(){
+  const pw = $id('pw').value;
+  if(!pw) return toast('Enter the password','warn');
+  const btn = $id('loginBtn'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> UNLOCKING…';
+  const r = await api('/api/login',{method:'POST',body:{password:pw}});
+  btn.disabled=false; btn.textContent='UNLOCK DASHBOARD';
+  if(r.ok){ token=r.token; localStorage.setItem('ylu_token',token); enterApp(); toast('Welcome back, boss 🇮🇳','ok'); }
+  else { toast(r.error||'Wrong password','err'); }
+}
+
+function logout(silent){
+  localStorage.removeItem('ylu_token'); token='';
+  if(pollTimer) clearInterval(pollTimer);
+  if(clockTimer) clearInterval(clockTimer);
+  pollTimer=clockTimer=null;
+  $id('app').style.display='none';
+  $id('login').style.display='flex';
+  if(!silent) toast('Signed out','info');
+}
+
+/* ═══════════ SHELL ═══════════ */
+function enterApp(){
+  $id('login').style.display='none';
+  const app = $id('app'); app.style.display='block';
+  app.innerHTML = `
+    <div class="mobile-top">
+      <div class="logo">Y</div>
+      <div class="nm">${BRAND}</div>
+      <div class="spacer"></div>
+      <span class="live-pill" style="margin:0" id="mLive"><span class="dot"></span>LIVE</span>
+    </div>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="side-brand">
+          <div class="logo">Y</div>
+          <div class="nm">${BRAND}<small>CONTROL CENTER 🇮🇳</small></div>
+        </div>
+        ${TABS.map(t=>`<div class="nav-item" data-tab="${t.id}" onclick="switchTab('${t.id}')">
+          <span class="ni">${t.icon}</span>${t.label}</div>`).join('')}
+        <div class="side-foot">
+          <div class="live-pill"><span class="dot" id="hLive"></span>ENGINE LIVE</div>
+          <div class="clock" id="clock">--:--:--</div>
+          <button class="btn dng sm" style="width:100%;justify-content:center;margin-top:10px" onclick="logout()">🚪 Sign out</button>
+        </div>
+      </aside>
+      <main class="main" id="content"></main>
+    </div>
+    <nav class="bottom-nav">
+      ${TABS.map(t=>`<div class="bn" data-tab="${t.id}" onclick="switchTab('${t.id}')">
+        <span class="bi">${t.icon}</span>${t.label.split(' ')[0]}</div>`).join('')}
+    </nav>`;
+  startClock();
+  switchTab('dashboard');
+}
+
+function startClock(){
+  if(clockTimer) clearInterval(clockTimer);
+  const tick=()=>{const el=$id('clock');if(el)el.textContent=new Date().toLocaleTimeString('en-IN');};
+  tick(); clockTimer=setInterval(tick,1000);
+}
+
+function setActiveNav(){
+  document.querySelectorAll('.nav-item[data-tab]').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));
+  document.querySelectorAll('.bn[data-tab]').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));
+}
+
+function switchTab(t){
+  tab=t; setActiveNav();
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  if(t==='dashboard'){ renderDashboard(true); pollTimer=setInterval(()=>renderDashboard(false),2500); }
+  else if(t==='create'){ renderCreate(); }
+  else if(t==='guild'){ renderGuild(); pollTimer=setInterval(refreshGuild,2000); }
+  else if(t==='consoles'){ renderConsoles(); pollTimer=setInterval(refreshConsoles,2000); }
+}
+
+function topbar(title, crumb){
+  return `<div class="topbar"><div><h2>${title}</h2><div class="crumb">${crumb}</div></div>
+    <div class="spacer"></div></div>`;
+}
+
+/* ═══════════ DASHBOARD ═══════════ */
+async function renderDashboard(first){
+  if(first) $id('content').innerHTML = topbar('Dashboard','Real-time overview')+
+    `<div class="grid-stats">${'<div class="shimmer"></div>'.repeat(4)}</div>`;
+  const d = await api('/api/status');
+  if(!d.ok) return;
+  lastStatus = d;
+  const failed = d.failed_uids||[];
+  const c = $id('content');
+  if(!c) return;
+
+  let html = topbar('Dashboard','Real-time overview')+`
+    <div class="grid-stats">
+      <div class="stat"><span class="ico">🛡️</span><div class="lbl">Active Squads</div><div class="num">${fmt(d.total_squads)}</div></div>
+      <div class="stat g"><span class="ico">👥</span><div class="lbl">Accounts</div><div class="num">${fmt(d.total_accounts)}</div></div>
+      <div class="stat c"><span class="ico">⚔️</span><div class="lbl">Total Matches</div><div class="num">${fmt(d.total_matches)}</div></div>
+      <div class="stat v"><span class="ico">⚙️</span><div class="lbl">Live Workers</div><div class="num">${fmt(d.active_workers)}</div></div>
+    </div>`;
+
+  if(failed.length){
+    html += `<div class="alert red"><span class="ai">⚠️</span><div><b>${failed.length} account(s) failed guild op:</b><br>${failed.map(esc).join(', ')} — try again with fresh IDs.</div></div>`;
+  }
+
+  html += `<div class="section-title"><span class="bar"></span>Squads</div><div id="squadsWrap"></div>`;
+  c.innerHTML = html;
+
+  const wrap = $id('squadsWrap');
+  if(!d.squads||d.squads.length===0){
+    wrap.innerHTML = `<div class="empty"><span class="ei">🛡️</span>No squads yet.<br>Head to <b>Create Squad</b> to spin one up.</div>`;
+    return;
+  }
+  wrap.innerHTML = d.squads.map(renderSquadCard).join('');
+}
+
+function statusBadge(st){
+  const s=String(st||'STOPPED').toUpperCase();
+  const cls = s==='ONLINE'?'b-online':s==='IN_MATCH'?'b-inmatch':s==='CONNECTING'?'b-connecting':
+              s==='ERROR'?'b-error':s==='PAUSED'?'b-connecting':'b-stopped';
+  const label = s==='IN_MATCH'?'IN MATCH':s;
+  return `<span class="badge ${cls}"><span class="bd"></span>${esc(label)}</span>`;
+}
+function guildBadge(g){
+  const s=String(g||'—').toUpperCase();
+  const cls = s==='SUCCESS'?'b-success':s==='FAILED'?'b-failed':'b-pending';
+  return `<span class="badge ${cls}">🏰 ${esc(s)}</span>`;
+}
+
+function renderSquadCard(s){
+  let slots='';
+  for(let i=0;i<4;i++){
+    const m=s.members[i];
+    if(m){
+      const gst=String(m.guild_status||'—').toUpperCase();
+      slots+=`<div class="slot filled">
+        <div class="slot-top">
+          <div class="avatar">${esc(initials(m.nickname))}</div>
+          <div style="min-width:0">
+            <div class="nick">${esc(m.nickname||'?')}</div>
+            <div class="uid">UID ${esc(m.uid)}</div>
+          </div>
+        </div>
+        <div class="meta">${statusBadge(m.status)}<span>LVL ${m.level||1}</span><span>• ${m.matches||0} matches</span></div>
+        <div class="meta">${guildBadge(gst)}</div>
+        <div class="slot-actions">
+          <button class="btn xs dng" onclick="removeMember(${s.id},'${esc(m.uid)}')">🗑 Remove</button>
+        </div>
+      </div>`;
+    } else {
+      slots+=`<div class="slot empty">Slot ${i+1} · Empty</div>`;
+    }
+  }
+  const controls = s.is_started
+    ? `<button class="btn sm warn" onclick="restartSquad(${s.id})">🔄 Restart</button>
+       <button class="btn sm dng" onclick="stopSquad(${s.id})">⏹ Stop</button>`
+    : `<button class="btn sm go" onclick="startSquad(${s.id})">▶ Start</button>`;
+  return `<div class="squad-card">
+    <div class="sq-head">
+      <h3>🛡️ Squad ${s.id} ${s.is_started?'<span class="badge b-running"><span class="bd"></span>RUNNING</span>':'<span class="badge b-stopped">STOPPED</span>'}</h3>
+      <span class="badge b-pending">${s.members.length}/4</span>
+      <div class="spacer"></div>
+      ${controls}
+      <button class="btn sm dng" onclick="deleteSquad(${s.id})">🗑 Delete</button>
+    </div>
+    <div class="slots">${slots}</div>
+  </div>`;
+}
+
+/* ═══════════ CREATE SQUAD ═══════════ */
+function renderCreate(){
+  let rows='';
+  for(let i=1;i<=4;i++){
+    rows+=`<div class="member-row">
+      <span class="sl">Slot ${i}</span>
+      <input class="inp" id="cuid${i}" placeholder="Game UID" inputmode="numeric">
+      <input class="inp" id="cpw${i}" type="password" placeholder="Password">
+    </div>`;
+  }
+  $id('content').innerHTML = topbar('Create Squad','Add up to 4 accounts')+`
+    <div class="form-card">
+      <h3>➕ New Squad</h3>
+      <p class="hint">Enter UID + password for 1–4 accounts. Create builds the squad; then hit <b>Start</b> on the dashboard to begin matchmaking.</p>
+      ${rows}
+      <button class="btn go" style="width:100%;justify-content:center;padding:14px;font-size:15px;margin-top:14px" id="createBtn" onclick="createSquad()">✅ Create Squad</button>
+    </div>`;
+}
+
+async function createSquad(){
+  const members=[];
+  for(let i=1;i<=4;i++){
+    const uid=$id('cuid'+i).value.trim();
+    const pw=$id('cpw'+i).value.trim();
+    if(uid&&pw) members.push({uid,password:pw});
+  }
+  if(!members.length) return toast('Add at least 1 UID + password','warn');
+  const b=$id('createBtn'); b.disabled=true; b.innerHTML='<span class="spin"></span> Creating…';
+  const r=await api('/api/squad/create',{method:'POST',body:{members}});
+  b.disabled=false; b.textContent='✅ Create Squad';
+  if(!r.ok) return toast(r.error||'Create failed','err');
+  toast('Squad '+r.squad_id+' created','ok');
+  tab='dashboard'; setActiveNav(); switchTab('dashboard');
+}
+
+/* ═══════════ SQUAD ACTIONS ═══════════ */
+async function startSquad(sid){ const r=await api('/api/squad/start',{method:'POST',body:{squad_id:sid}}); r.ok?toast('Squad '+sid+' started','ok'):toast(r.error,'err'); renderDashboard(false); }
+async function restartSquad(sid){ if(!await confirmBox('Restart Squad '+sid+'?','All workers will reconnect and matchmaking restarts.'))return; const r=await api('/api/squad/restart',{method:'POST',body:{squad_id:sid}}); r.ok?toast('Squad '+sid+' restarted','ok'):toast(r.error,'err'); renderDashboard(false); }
+async function stopSquad(sid){ if(!await confirmBox('Stop Squad '+sid+'?','Workers will be halted until you start again.'))return; const r=await api('/api/squad/stop',{method:'POST',body:{squad_id:sid}}); r.ok?toast('Squad '+sid+' stopped','warn'):toast(r.error,'err'); renderDashboard(false); }
+async function deleteSquad(sid){ if(!await confirmBox('Delete Squad '+sid+'?','This removes the squad and all its members permanently.'))return; const r=await api('/api/squad/delete',{method:'POST',body:{squad_id:sid}}); r.ok?toast('Squad '+sid+' deleted','warn'):toast(r.error,'err'); renderDashboard(false); }
+async function removeMember(sid,uid){ if(!await confirmBox('Remove '+uid+'?','Member will be pulled from Squad '+sid+'.'))return; const r=await api('/api/squad/remove',{method:'POST',body:{squad_id:sid,uid}}); r.ok?toast('Removed '+uid,'ok'):toast(r.error,'err'); renderDashboard(false); }
+
+/* ═══════════ GUILD ═══════════ */
+function renderGuild(){
+  $id('content').innerHTML = topbar('Guild Ops','Join / Leave / Owner spam')+`
+    <div class="form-card">
+      <h3>🏰 Single Account</h3>
+      <p class="hint">Run a guild action for one UID — works for accounts outside any squad too.</p>
+      <div class="form-2col" style="margin-bottom:12px">
+        <div><label class="label">Guild ID</label><input class="inp" id="gGuildId" placeholder="Guild ID"></div>
+        <div><label class="label">Action</label><select class="inp" id="gAction">
+          <option value="JOIN">Join</option><option value="LEAVE">Leave</option>
+          <option value="OWNER_SPAM">Owner Spam (Join + Friend Request)</option></select></div>
+      </div>
+      <div class="form-2col" style="margin-bottom:14px">
+        <div><label class="label">UID</label><input class="inp" id="gUid" placeholder="Game UID" inputmode="numeric"></div>
+        <div><label class="label">Password</label><input class="inp" id="gPw" type="password" placeholder="Password"></div>
+      </div>
+      <button class="btn info" onclick="guildOne(this)">🚀 Run For This UID</button>
+    </div>
+
+    <div class="form-card">
+      <h3>⚡ Batch — All Squad Accounts</h3>
+      <p class="hint">Fire the action across every account currently loaded in squads.</p>
+      <div class="form-3col" style="margin-bottom:14px">
+        <div><label class="label">Guild ID</label><input class="inp" id="gBatchGuildId" placeholder="Guild ID"></div>
+        <div><label class="label">Action</label><select class="inp" id="gBatchAction">
+          <option value="JOIN">Join</option><option value="LEAVE">Leave</option>
+          <option value="OWNER_SPAM">Owner Spam</option></select></div>
+        <div><label class="label">Owner UID <span style="opacity:.6">(spam only)</span></label><input class="inp" id="gOwnerUid" placeholder="auto-detect if empty" inputmode="numeric"></div>
+      </div>
+      <button class="btn warn" onclick="guildBatch(this)">⚡ Run On All Accounts</button>
+    </div>
+
+    <div class="section-title"><span class="bar"></span>Recent Jobs</div>
+    <div id="guildResult"></div>`;
+  refreshGuild();
+}
+
+async function guildOne(btn){
+  const guild_id=$id('gGuildId').value.trim();
+  const action=$id('gAction').value;
+  const uid=$id('gUid').value.trim();
+  const password=$id('gPw').value.trim();
+  if(!guild_id||!uid||!password) return toast('Guild ID + UID + password required','warn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Queued…';
+  const r=await api('/api/guild/one',{method:'POST',body:{guild_id,action,uid,password}});
+  btn.disabled=false; btn.textContent='🚀 Run For This UID';
+  r.ok?toast('Guild task started for '+uid,'ok'):toast(r.error,'err');
+}
+
+async function guildBatch(btn){
+  const guild_id=$id('gBatchGuildId').value.trim();
+  const action=$id('gBatchAction').value;
+  const owner_uid=$id('gOwnerUid').value.trim();
+  if(!guild_id) return toast('Guild ID required','warn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Launching…';
+  const r=await api('/api/guild/run',{method:'POST',body:{guild_id,action,owner_uid}});
+  btn.disabled=false; btn.textContent='⚡ Run On All Accounts';
+  r.ok?toast('Batch job #'+r.job_id+' started ('+r.total+' accounts)','ok'):toast(r.error,'err');
+}
+
+async function refreshGuild(){
+  const [hist,d] = await Promise.all([api('/api/guild/jobs'), api('/api/status')]);
+  const el=$id('guildResult'); if(!el) return;
+  let h='';
+  if(d.ok && d.failed_uids && d.failed_uids.length){
+    h+=`<div class="alert red"><span class="ai">⚠️</span><div><b>${d.failed_uids.length} failed:</b> ${d.failed_uids.map(esc).join(', ')}</div></div>`;
+  }
+  if(hist&&hist.ok&&hist.jobs&&hist.jobs.length){
+    for(const job of hist.jobs.slice().reverse().slice(0,6)){
+      const results=Object.entries(job.results||{});
+      const ok=results.filter(([,r])=>r.ok).length;
+      const fail=results.filter(([,r])=>!r.ok).length;
+      h+=`<div class="form-card" style="margin-bottom:14px">
+        <div class="sq-head" style="margin-bottom:12px">
+          <h3>🎯 Job #${job.id}</h3>
+          <span class="badge b-pending">${esc(job.guild_id)}</span>
+          <span class="badge b-pending">${esc(job.action)}</span>
+          ${job.done?'<span class="badge b-success"><span class="bd"></span>DONE</span>':'<span class="badge b-connecting"><span class="bd"></span>RUNNING</span>'}
+        </div>
+        <div class="grid-stats" style="margin-bottom:0">
+          <div class="stat"><div class="lbl">Total</div><div class="num">${results.length||job.uids.length}</div></div>
+          <div class="stat g"><div class="lbl">Success</div><div class="num">${ok}</div></div>
+          <div class="stat"><div class="lbl">Failed</div><div class="num" style="background:linear-gradient(90deg,#ff8b96,#ff4d5e);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">${fail}</div></div>
+        </div>
+        <div class="guild-grid">`;
+      for(const [uid,r] of results){
+        h+=`<div class="gitem ${r.ok?'ok':'fail'}">
+          <div class="u">${esc(uid)}<span class="badge ${r.ok?'b-success':'b-failed'}">${r.ok?'OK':'FAIL'}</span></div>
+          ${r.msg?`<div class="m">${esc(r.msg)}</div>`:''}
+          ${r.detail?`<div class="m" style="opacity:.7">${esc(r.detail)}</div>`:''}
+        </div>`;
+      }
+      h+=`</div></div>`;
+    }
+  } else {
+    h+=`<div class="empty"><span class="ei">🏰</span>No guild jobs yet.</div>`;
+  }
+  el.innerHTML=h;
+}
+
+/* ═══════════ CONSOLES ═══════════ */
+async function renderConsoles(){
+  const d=await api('/api/status');
+  if(!d.ok) return;
+  let h=topbar('Consoles','Per-squad live logs')+`<div class="alert info"><span class="ai">💻</span><div>Each squad streams its own console. Pick a squad below.</div></div>`;
+  if(!d.squads||!d.squads.length){
+    h+=`<div class="empty"><span class="ei">💻</span>No squads to display.</div>`;
+    $id('content').innerHTML=h; return;
+  }
+  if(consoleSquad===null||!d.squads.find(s=>s.id===consoleSquad)) consoleSquad=d.squads[0].id;
+  h+=`<div class="console-tabs">`;
+  for(const s of d.squads) h+=`<button class="btn sm ${consoleSquad===s.id?'info':''}" onclick="selectConsole(${s.id})">💻 Squad ${s.id}</button>`;
+  h+=`</div><div id="consoleBox"></div>`;
+  $id('content').innerHTML=h;
+  loadConsole(consoleSquad);
+}
+function selectConsole(sid){ consoleSquad=sid; renderConsoles(); }
+async function refreshConsoles(){ if(consoleSquad!==null) loadConsole(consoleSquad); }
+
+async function loadConsole(sid){
+  const d=await api('/api/squad/logs?squad_id='+sid);
+  const box=$id('consoleBox'); if(!box) return;
+  const logs=(d.ok&&d.logs)||[];
+  let lines='';
+  if(!logs.length){ lines=`<div class="log-line info"><span class="m">waiting for squad ${sid} activity…</span></div>`; }
+  else { for(const l of logs) lines+=`<div class="log-line ${esc(l.lvl||'info')}"><span class="t">[${esc(l.t)}]</span><span class="m">${esc(l.m)}</span></div>`; }
+  box.innerHTML=`<div class="console">
+    <div class="console-top"><span class="td t1"></span><span class="td t2"></span><span class="td t3"></span>
+      <span class="ttl">yadav@levelup:~/squad-${sid}$ tail -f</span></div>
+    <div class="console-body" id="consoleBody">${lines}<div class="log-line"><span class="m" style="color:var(--txt-dim)">$</span><span class="cursor"></span></div></div>
+  </div>`;
+  const body=$id('consoleBody');
+  if(body) body.scrollTop=body.scrollHeight;
+}
+
+/* ═══════════ BOOT ═══════════ */
+(async function boot(){
+  if(token){
+    const d=await api('/api/status');
+    if(d.ok){ enterApp(); } else { logout(true); }
+  } else {
+    $id('login').style.display='flex';
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# ── secrets / runtime state (never commit) ──
+token_cache.json
+accounts.json
+devices.json
+guild_exp_cache.json
+FREXY/
+*.log
+
+# ── python ──
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# ── os / editor ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

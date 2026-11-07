@@ -1,0 +1,23 @@
+# ═══════════════════════════════════════════════════════════════
+#  YADAV LEVEL UP — Render Blueprint (Infrastructure as Code)
+#  Deploy: push to GitHub → Render → New → Blueprint → pick repo
+# ═══════════════════════════════════════════════════════════════
+services:
+  - type: web
+    name: yadav-level-up
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ADMIN_PASSWORD
+        sync: false            # set your own secret in the Render dashboard
+      - key: DEFAULT_REGION
+        value: IND
+      - key: PYTHONUNBUFFERED
+        value: "1"
