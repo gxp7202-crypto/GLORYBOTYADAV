@@ -242,8 +242,12 @@ async function renderCreate(){
 async function createGuestAccount(){
   const st = $id('guestStatus');
   if(!st){ toast('Create Squad tab not loaded. Refresh and try again.','err'); return; }
-  st.textContent = 'Creating guest account via Garena...';
-  const r = await api('/api/account/guest',{method:'POST'});
+  const uid = prompt('Enter Guest UID (from Free Fire app → Login as Guest):');
+  if(!uid) return;
+  const pw = prompt('Enter Guest Password (from Free Fire app):');
+  if(!pw) return;
+  st.textContent = 'Validating guest account with Garena...';
+  const r = await api('/api/account/guest',{method:'POST',body:{uid,pw}});
   if(r.ok){
     st.textContent = 'Created: '+r.nickname+' (UID: '+r.uid+', Pass: '+r.password+') \u2705';
     toast('Guest account '+r.nickname+' created! Level '+r.level+'.','ok');
