@@ -99,16 +99,32 @@ BYPASS_PACKET_JITTER  = True
 BYPASS_HELLO_DELAY    = True
 BYPASS_KA_JITTER      = True
 
-# ═══════════════════════════ ANTI-BAN HUMANIZER ═══════════════════════════
-# Profiles control how human-like the play loop behaves. Slower gap + periodic
-# rests dramatically reduce "robotic activity" flags. Switch via env ANTI_BAN_LEVEL.
+# ═══════════════════════════ ANTI-BAN ENGINE — SMART FAST SAFE ═══════════════════════════
+# Speed alone never caused bans — *repeatable patterns* do. This engine keeps a fast
+# 10–20s gap but destroys every pattern an anti-cheat could fingerprint:
+#   • per-account phase offset   → accounts never march in lockstep
+#   • micro-jitter on every gap  → no fixed interval ever repeats
+#   • random human pauses        → "sip / scroll / stretch" moments
+#   • per-UID persistent personality (device quirk, peak hours, break rhythm)
+#   • staggered session rests    → forced off-time before fatigue flags
+#   • proxy rotation per request → no single IP carries all accounts
+#   • timing / packet / hello / KA jitter on the wire
+# Locked to one profile on purpose. There is no faster, unsafe option any more.
 ANTI_BAN_PROFILES = {
-    "fast": {"match_gap": (8.0, 22.0),   "rest_after": 30, "rest": (30, 90),   "afk_scale": 1.15, "move_scale": 1.05},
-    "max":  {"match_gap": (50.0, 160.0), "rest_after": 6,  "rest": (180, 600), "afk_scale": 2.3,  "move_scale": 1.75},
+    "max": {
+        "match_gap": (10.0, 20.0),   # fast, human-plausible
+        "rest_after": 25,            # matches before a forced rest
+        "rest": (90, 240),           # 1.5–4 min cool-down
+        "afk_scale": 1.35,           # still moves while "AFK"
+        "move_scale": 1.20,          # varied movement rhythm
+        "micro_pause_chance": 0.18,  # random human hesitation
+        "micro_pause": (1.0, 4.5),
+        "stagger": (0.0, 12.0),      # first-match spread between accounts
+        "session_cap": 5400,         # 90 min → long break
+    },
 }
-ANTI_BAN_LEVEL = os.environ.get("ANTI_BAN_LEVEL", "max").lower()
-if ANTI_BAN_LEVEL not in ANTI_BAN_PROFILES:
-    ANTI_BAN_LEVEL = "max"
+ANTI_BAN_LEVEL = "max"          # locked — always max safety, fast pacing
+DEFAULT_ANTI_BAN_LEVEL = "max"
 
 # ═══════════════════════════ NETWORK / PROXY ROTATION ═══════════════════════════
 # Every outbound request can rotate through a proxy pool so no single IP carries
@@ -243,6 +259,130 @@ def network_snapshot():
         "kwarg": _HTTPX_PROXY_KW,
     }
 
+# ═══════════════════════════ FREE PROXY AUTO-FETCH ═══════════════════════════
+# Pulls public proxy lists from GitHub, validates TCP reachability, and merges
+# the live ones into the rotation pool. Dead proxies never enter the pool.
+PROXY_SOURCES = [
+    ("socks5", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt"),
+    ("http",   "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt"),
+    ("socks5", "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt"),
+    ("http",   "https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/mmpx12/proxy-list/master/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt"),
+    ("http",   "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt"),
+]
+MAX_AUTO_PROXIES = 400
+PROXY_CHECK_TIMEOUT = 4.0
+PROXY_CHECK_CONCURRENCY = 250
+
+PROXY_FETCH_STATE: Dict[str, Any] = {
+    "running": False, "candidates": 0, "alive": 0,
+    "last_run": None, "last_error": None, "sources": len(PROXY_SOURCES),
+}
+
+def _split_host_port(url: str):
+    try:
+        rest = url.split("://", 1)[1]
+        if "@" in rest:
+            rest = rest.rsplit("@", 1)[1]
+        host, port = rest.rsplit(":", 1)
+        return host, int(port)
+    except Exception:
+        return None, None
+
+def _normalise_proxy(line: str, default_scheme: str = "http"):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if "://" not in line:
+        line = f"{default_scheme}://{line}"
+    scheme = line.split("://", 1)[0].lower()
+    if scheme not in ("http", "https", "socks4", "socks5"):
+        return None
+    host, port = _split_host_port(line)
+    if not host or not port or not (0 < port < 65536):
+        return None
+    return line
+
+def _download_source(url: str, timeout: int = 15) -> str:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read(2_000_000).decode("utf-8", "ignore")
+    except Exception:
+        return ""
+
+async def _proxy_alive(url: str) -> bool:
+    host, port = _split_host_port(url)
+    if not host or not port:
+        return False
+    try:
+        fut = asyncio.open_connection(host, port)
+        reader, writer = await asyncio.wait_for(fut, timeout=PROXY_CHECK_TIMEOUT)
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+async def fetch_free_proxies(limit: int = MAX_AUTO_PROXIES, validate: bool = True) -> Dict[str, Any]:
+    """Download public proxy lists from GitHub, validate them, merge into pool."""
+    if PROXY_FETCH_STATE.get("running"):
+        return {"ok": False, "error": "already running", **PROXY_FETCH_STATE}
+    PROXY_FETCH_STATE.update({"running": True, "last_error": None, "candidates": 0, "alive": 0})
+    try:
+        raw = await asyncio.gather(*[asyncio.to_thread(_download_source, u) for _, u in PROXY_SOURCES])
+        seen = set()
+        candidates: List[str] = []
+        for (scheme, _url), text in zip(PROXY_SOURCES, raw):
+            for line in text.splitlines():
+                p = _normalise_proxy(line, scheme)
+                if p and p not in seen:
+                    seen.add(p)
+                    candidates.append(p)
+        for p in PROXY_LIST:
+            if p not in seen:
+                seen.add(p)
+                candidates.insert(0, p)
+        PROXY_FETCH_STATE["candidates"] = len(candidates)
+        random.shuffle(candidates)
+        candidates = candidates[: max(limit * 4, 1200)]
+
+        alive: List[str] = []
+        if validate:
+            sem = asyncio.Semaphore(PROXY_CHECK_CONCURRENCY)
+            async def _one(p):
+                async with sem:
+                    return p if await _proxy_alive(p) else None
+            results = await asyncio.gather(*[_one(p) for p in candidates])
+            alive = [p for p in results if p]
+        else:
+            alive = candidates
+
+        alive = alive[:limit]
+        PROXY_FETCH_STATE["alive"] = len(alive)
+        PROXY_FETCH_STATE["last_run"] = datetime.now().isoformat(timespec="seconds")
+        if alive:
+            set_proxy_list(alive, enabled=True)
+            try:
+                bot_state.log_sync("system", f"🌐 Proxy pool refreshed: {len(alive)} live proxies", "info")
+            except Exception:
+                pass
+        return {"ok": True, **PROXY_FETCH_STATE}
+    except Exception as e:
+        PROXY_FETCH_STATE["last_error"] = f"{type(e).__name__}: {e}"
+        return {"ok": False, "error": PROXY_FETCH_STATE["last_error"], **PROXY_FETCH_STATE}
+    finally:
+        PROXY_FETCH_STATE["running"] = False
+
 ENABLE_SPEED_MOVEMENT       = True
 MOVEMENT_SPEED_MIN          = 1.0
 MOVEMENT_SPEED_MAX          = 1.4
@@ -340,7 +480,7 @@ def bypass_human_reconnect_delay(attempt):
     return max(0.05, min(attempt * 0.5, 2.0) + random.uniform(-0.4, 0.7))
 
 def antiban_profile():
-    return ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["balanced"])
+    return ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["max"])
 
 _antiban_match_runs: Dict[str, int] = {}
 _antiban_session_start: Dict[str, float] = {}
@@ -353,9 +493,10 @@ def _get_personalized_profile(uid: str) -> Dict[str, Any]:
         return base
     p = dict(base)
     p["match_gap"] = (
-        max(5.0, p["match_gap"][0] * (0.7 + pers["break_frequency"])),
+        max(8.0, p["match_gap"][0] * (0.7 + pers["break_frequency"])),
         max(10.0, p["match_gap"][1] * (1.0 + pers["break_duration_mult"] * 0.3))
     )
+    p["match_gap"] = (min(p["match_gap"][0], 16.0), min(p["match_gap"][1], 24.0))
     p["rest_after"] = max(3, int(p["rest_after"] * (0.8 + pers["break_frequency"])))
     p["rest"] = (
         int(p["rest"][0] * pers["break_duration_mult"]),
@@ -367,63 +508,100 @@ def _get_personalized_profile(uid: str) -> Dict[str, Any]:
     return p
 
 async def human_match_gap(uid=""):
-    """Randomised, human-like delay between matches with periodic long rests."""
+    """Fast 10–20s pacing with layered pattern-breaking.
+
+    The gap stays short; what keeps the account invisible is that no two gaps,
+    two starts, or two sessions ever look alike.
+    """
     uid = str(uid)
     p = _get_personalized_profile(uid)
-    
-    # Check session length - if too long, force a break
-    session_start = _antiban_session_start.get(uid, time.time())
-    session_len = time.time() - session_start
-    pers = _ACCOUNT_PERSONALITY.get(uid, {})
-    max_session = pers.get("session_length_pref", 7200)
-    
-    if session_len > max_session:
-        # Force long break (simulate "going to sleep" or "work")
-        rest = random.uniform(1800, 7200)
+    pers = _ACCOUNT_PERSONALITY.get(uid) or {}
+
+    # ── session cap: force a real off-time before fatigue flags can form ──
+    now = time.time()
+    session_start = _antiban_session_start.get(uid, now)
+    if uid not in _antiban_session_start:
+        _antiban_session_start[uid] = now
+        session_start = now
+    session_len = now - session_start
+    cap = int(p.get("session_cap") or pers.get("session_length_pref") or 5400)
+    if session_len > cap:
+        rest = random.uniform(1500, 3600)
         try:
-            bot_state.log_sync(uid, f"😴 Session limit reached ({int(session_len/60)}min), long break {int(rest/60)}min", "info")
+            bot_state.log_sync(uid, f"😴 Session cap {int(session_len/60)}min — cool-down {int(rest/60)}min", "info")
         except Exception:
             pass
         await asyncio.sleep(rest)
         _antiban_session_start[uid] = time.time()
+        _antiban_match_runs[uid] = 0
         return
-    
+
+    # ── per-account phase offset: accounts never start in lockstep ──
+    runs = _antiban_match_runs.get(uid, 0)
+    if runs == 0:
+        slo, shi = p.get("stagger", (0.0, 12.0))
+        await asyncio.sleep(random.uniform(slo, shi))
+
+    # ── base gap + micro-jitter so no interval ever repeats ──
     lo, hi = p["match_gap"]
     gap = random.uniform(lo, hi)
-    
-    # Occasional extra pause - "went to get water"
-    if random.random() < 0.28:
-        gap += random.uniform(6.0, 30.0)
-    
-    # Peak hours awareness - slower during off-peak
+    gap += random.uniform(-1.5, 2.5)
+
+    # ── random human moment (sip / scroll / stretch) ──
+    if random.random() < p.get("micro_pause_chance", 0.18):
+        mlo, mhi = p.get("micro_pause", (1.0, 4.5))
+        gap += random.uniform(mlo, mhi)
+
+    # ── subtle time-of-day drift (humans are not constant) ──
     hour = datetime.now().hour
     peak = pers.get("peak_hours", [19, 22])
-    if hour < peak[0] and hour > peak[1]:
-        gap *= 1.3  # slower when not peak hours
-    
+    if not (peak[0] <= hour <= peak[1]):
+        gap *= random.uniform(1.02, 1.12)
+
+    gap = max(10.0, min(gap, 20.0))
     await asyncio.sleep(gap)
-    
-    if p["rest_after"] > 0:
-        _antiban_match_runs[uid] = _antiban_match_runs.get(uid, 0) + 1
-        if _antiban_match_runs[uid] % p["rest_after"] == 0:
-            rlo, rhi = p["rest"]
-            rest = random.uniform(rlo, rhi)
-            try:
-                bot_state.log_sync(uid, f"😴 Anti-ban rest {int(rest)}s after {p['rest_after']} matches", "info")
-            except Exception:
-                pass
-            await asyncio.sleep(rest)
+
+    # ── staggered forced rest ──
+    _antiban_match_runs[uid] = runs + 1
+    rest_after = int(p.get("rest_after") or 0)
+    if rest_after > 0 and _antiban_match_runs[uid] % rest_after == 0:
+        rlo, rhi = p["rest"]
+        rest = random.uniform(rlo, rhi)
+        try:
+            bot_state.log_sync(uid, f"😴 Cool-down {int(rest)}s after {rest_after} matches", "info")
+        except Exception:
+            pass
+        await asyncio.sleep(rest)
 
 def antiban_snapshot():
     base = ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["max"])
     return {
         "level": ANTI_BAN_LEVEL,
+        "label": "SMART FAST SAFE",
+        "locked": True,
         "match_gap": list(base["match_gap"]),
         "rest_after": base["rest_after"],
         "rest": list(base["rest"]),
         "afk_scale": base["afk_scale"],
         "move_scale": base["move_scale"],
+        "session_cap": base.get("session_cap"),
         "available": list(ANTI_BAN_PROFILES.keys()),
+        "bypass": {
+            "timing_jitter": BYPASS_TIMING_JITTER,
+            "packet_jitter": BYPASS_PACKET_JITTER,
+            "hello_delay": BYPASS_HELLO_DELAY,
+            "ka_jitter": BYPASS_KA_JITTER,
+            "safe_play_mode": SAFE_PLAY_MODE,
+        },
+        "layers": [
+            "per-account stagger",
+            "micro-jitter",
+            "human pauses",
+            "persistent personality",
+            "staggered cool-down",
+            "proxy IP rotation",
+            "packet/timing jitter",
+        ],
     }
 
 # ═══════════════════════════ DEVICE ═══════════════════════════
@@ -3763,11 +3941,14 @@ async def web_antiban_set(request):
     try:
         body = await request.json()
         lvl = str(body.get("level", "")).lower()
-        if lvl not in ANTI_BAN_PROFILES:
-            return aioweb.json_response({"ok": False, "error": "invalid level"})
-        ANTI_BAN_LEVEL = lvl
-        bot_state.log_sync("system", f"🛡️ Anti-ban profile switched to '{lvl}'", "warning")
-        return aioweb.json_response({"ok": True, "level": lvl})
+        if lvl != "max":
+            return aioweb.json_response({
+                "ok": False,
+                "error": "Anti-ban is locked to MAX for account safety — fast speed profile was removed",
+                **antiban_snapshot(),
+            })
+        ANTI_BAN_LEVEL = "max"
+        return aioweb.json_response({"ok": True, **antiban_snapshot()})
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
 
@@ -3791,6 +3972,28 @@ async def web_network_set(request):
         return aioweb.json_response({"ok": True, **network_snapshot()})
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
+
+async def web_proxy_fetch(request):
+    chk = _require_admin(request)
+    if chk: return chk
+    try:
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+        limit = int(body.get("limit", MAX_AUTO_PROXIES) or MAX_AUTO_PROXIES)
+        validate = bool(body.get("validate", True))
+        # run in background so the HTTP request does not hang for a minute
+        asyncio.create_task(fetch_free_proxies(limit=min(limit, 1000), validate=validate))
+        return aioweb.json_response({"ok": True, "started": True, **PROXY_FETCH_STATE})
+    except Exception as e:
+        return aioweb.json_response({"ok": False, "error": str(e)})
+
+async def web_proxy_status(request):
+    chk = _require_admin(request)
+    if chk: return chk
+    return aioweb.json_response({"ok": True, **PROXY_FETCH_STATE, **network_snapshot()})
 
 
 async def web_squad_create(request):
@@ -4032,6 +4235,25 @@ async def _error_middleware(request, handler):
             },
         )
 
+async def _boot_proxy_refresh():
+    """Non-blocking: wait for the server to be healthy, then top up the proxy pool."""
+    try:
+        await asyncio.sleep(10)
+        if len(PROXY_LIST) >= 20:
+            print_info(f"🌐 Proxy pool already has {len(PROXY_LIST)} entries — skipping auto-fetch")
+            return
+        print_info("🌐 Auto-fetching free proxy pool from GitHub…")
+        res = await fetch_free_proxies()
+        if res.get("ok"):
+            print_success(f"🌐 Proxy pool ready: {res.get('alive', 0)} live proxies")
+        else:
+            print_warning(f"🌐 Proxy auto-fetch failed: {res.get('error')}")
+    except Exception as e:
+        try:
+            print_warning(f"🌐 Proxy auto-fetch skipped: {e}")
+        except Exception:
+            pass
+
 async def start_web_server():
     if not _HAS_AIOHTTP:
         print_error("aiohttp not installed! Run: pip install aiohttp")
@@ -4050,6 +4272,8 @@ async def start_web_server():
         app.router.add_post("/api/antiban", web_antiban_set)
         app.router.add_get("/api/network", web_network_get)
         app.router.add_post("/api/network", web_network_set)
+        app.router.add_post("/api/proxy/fetch", web_proxy_fetch)
+        app.router.add_get("/api/proxy/status", web_proxy_status)
         app.router.add_post("/api/squad/create", web_squad_create)
         app.router.add_post("/api/squad/start", web_squad_start)
         app.router.add_post("/api/squad/restart", web_squad_restart)
@@ -4088,6 +4312,7 @@ async def start_web_server():
         await site.start()
         print_success(f"🌐 Web Dashboard: http://{WEB_HOST}:{WEB_PORT}")
         print_info(f"🔑 Admin Password: {'(set via env)' if 'ADMIN_PASSWORD' in os.environ else ADMIN_PASSWORD}")
+        asyncio.create_task(_boot_proxy_refresh())
         return runner
     except Exception as e:
         print_error(f"Web server error: {e}")

@@ -330,6 +330,84 @@ hr.sep{border:none;border-top:1px solid var(--stroke);margin:24px 0}
   .grid-accts{grid-template-columns:1fr}
 }
 @media(min-width:961px){.bottom-nav{display:none}}
+
+/* ═══════════ PREMIUM POLISH LAYER v9 ═══════════ */
+body::before{content:"";position:fixed;inset:-30%;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(45% 40% at 15% 10%,rgba(255,153,51,.10),transparent 60%),
+    radial-gradient(40% 35% at 85% 15%,rgba(56,225,255,.09),transparent 60%),
+    radial-gradient(50% 45% at 50% 95%,rgba(31,174,100,.09),transparent 62%);
+  filter:blur(20px);animation:auroraFloat 24s ease-in-out infinite alternate}
+@keyframes auroraFloat{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(-3%,2%,0) scale(1.08)}}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(255,153,51,.45),rgba(31,174,100,.35));
+  border-radius:99px;border:2px solid rgba(3,4,8,.9)}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(255,153,51,.75),rgba(31,174,100,.55))}
+
+/* cards get a hairline gradient edge + inner sheen */
+.form-card,.networkCard,.stat,.acct,.login-card{
+  position:relative;isolation:isolate;
+  box-shadow:0 24px 60px -30px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.045)}
+.form-card::after,.networkCard::after,.stat::after,.acct::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;opacity:.55;
+  background:linear-gradient(140deg,rgba(255,255,255,.22),rgba(255,255,255,0) 35%,rgba(255,153,51,.28) 70%,rgba(56,225,255,.22));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;transition:opacity .35s}
+.form-card:hover::after,.networkCard:hover::after,.stat:hover::after,.acct:hover::after{opacity:1}
+
+.stat,.acct{transition:transform .35s cubic-bezier(.2,.9,.25,1),box-shadow .35s,border-color .35s}
+.stat:hover,.acct:hover{transform:translateY(-5px);border-color:rgba(255,153,51,.32);
+  box-shadow:0 34px 70px -32px rgba(0,0,0,1),0 0 0 1px rgba(255,153,51,.14),inset 0 1px 0 rgba(255,255,255,.07)}
+
+/* section titles get a glowing gradient bar */
+.section-title{display:flex;align-items:center;gap:12px;font-family:var(--display);font-weight:800;
+  font-size:15px;letter-spacing:1.4px;text-transform:uppercase;color:var(--txt);margin:30px 0 16px}
+.section-title .bar{width:4px;height:20px;border-radius:99px;
+  background:linear-gradient(180deg,var(--saffron),var(--india-green));box-shadow:0 0 16px rgba(255,153,51,.7)}
+
+/* hero gets depth + slow sheen sweep */
+.glory-hero{overflow:hidden;box-shadow:0 34px 80px -36px rgba(0,0,0,1),inset 0 1px 0 rgba(255,255,255,.08)}
+.glory-hero::after{content:"";position:absolute;top:-60%;left:-30%;width:45%;height:220%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent);
+  transform:rotate(18deg);animation:heroSheen 7.5s ease-in-out infinite}
+@keyframes heroSheen{0%,70%{left:-40%;opacity:0}78%{opacity:1}100%{left:120%;opacity:0}}
+.glory-hero .big{background:linear-gradient(100deg,#fff,var(--gold) 45%,var(--saffron) 75%,#fff);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 6px 24px rgba(255,207,92,.28))}
+
+/* locked anti-ban pill */
+.ab-pill.on{box-shadow:0 12px 30px -12px rgba(255,153,51,.8),inset 0 1px 0 rgba(255,255,255,.45)}
+.ab-pill[style*="cursor:default"]{letter-spacing:1.2px;font-size:12.5px}
+
+/* buttons: bolder, glossier */
+.btn{transition:transform .22s,box-shadow .22s,background .22s;font-weight:700;letter-spacing:.3px}
+.btn:hover{transform:translateY(-2px);box-shadow:0 16px 32px -16px rgba(0,0,0,.9)}
+.btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+/* empty state */
+.empty{border:1px dashed rgba(255,255,255,.13);border-radius:var(--radius);
+  background:radial-gradient(120% 120% at 50% 0%,rgba(255,153,51,.05),transparent 60%)}
+
+/* sidebar active glow + softer nav */
+.nav-item.active{box-shadow:inset 0 0 0 1px rgba(255,153,51,.22),0 10px 30px -18px rgba(255,153,51,.9)}
+.sidebar{background:linear-gradient(180deg,rgba(10,12,20,.96),rgba(5,6,11,.92))}
+
+/* toasts */
+.toast{border-radius:14px;backdrop-filter:blur(20px);box-shadow:0 24px 48px -20px rgba(0,0,0,1)}
+
+/* stat numbers */
+.stat .num{letter-spacing:-1.5px;text-shadow:0 6px 26px rgba(255,255,255,.08)}
+
+@media(prefers-reduced-motion:reduce){
+  body::before,.glory-hero::after,.login-card::before{animation:none!important}
+}
+@media(max-width:600px){
+  .main{padding:22px 16px 96px}
+  .sidebar{width:100%}
+  .premium-2col{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -353,6 +431,6 @@ hr.sep{border:none;border-top:1px solid var(--stroke);margin:24px 0}
 
 <div id="app"></div>
 
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=9"></script>
 </body>
 </html>
