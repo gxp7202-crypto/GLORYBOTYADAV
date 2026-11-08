@@ -64,6 +64,7 @@ WEB_PORT = int(os.environ.get("PORT", 20333))
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "yadav1only")
 BRAND_WEB_NAME = "YADAV LEVEL UP"
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+STATIC_DIR = os.path.join(WEB_DIR, "static")
 
 ACCOUNTS_FILE = "accounts.json"
 TOKEN_CACHE_FILE = "token_cache.json"
@@ -102,15 +103,12 @@ BYPASS_KA_JITTER      = True
 # Profiles control how human-like the play loop behaves. Slower gap + periodic
 # rests dramatically reduce "robotic activity" flags. Switch via env ANTI_BAN_LEVEL.
 ANTI_BAN_PROFILES = {
-    "off":      {"match_gap": (3.0, 8.0),    "rest_after": 0,  "rest": (0, 0),     "afk_scale": 1.0,  "move_scale": 1.0},
-    "fast":     {"match_gap": (8.0, 22.0),   "rest_after": 30, "rest": (30, 90),   "afk_scale": 1.15, "move_scale": 1.05},
-    "low":      {"match_gap": (12.0, 40.0),  "rest_after": 20, "rest": (45, 120),  "afk_scale": 1.3,  "move_scale": 1.15},
-    "balanced": {"match_gap": (25.0, 80.0),  "rest_after": 12, "rest": (60, 210),  "afk_scale": 1.6,  "move_scale": 1.35},
-    "max":      {"match_gap": (50.0, 160.0), "rest_after": 6,  "rest": (180, 600), "afk_scale": 2.3,  "move_scale": 1.75},
+    "fast": {"match_gap": (8.0, 22.0),   "rest_after": 30, "rest": (30, 90),   "afk_scale": 1.15, "move_scale": 1.05},
+    "max":  {"match_gap": (50.0, 160.0), "rest_after": 6,  "rest": (180, 600), "afk_scale": 2.3,  "move_scale": 1.75},
 }
-ANTI_BAN_LEVEL = os.environ.get("ANTI_BAN_LEVEL", "balanced").lower()
+ANTI_BAN_LEVEL = os.environ.get("ANTI_BAN_LEVEL", "max").lower()
 if ANTI_BAN_LEVEL not in ANTI_BAN_PROFILES:
-    ANTI_BAN_LEVEL = "balanced"
+    ANTI_BAN_LEVEL = "max"
 
 # ═══════════════════════════ NETWORK / PROXY ROTATION ═══════════════════════════
 # Every outbound request can rotate through a proxy pool so no single IP carries
@@ -140,6 +138,59 @@ try:
 except Exception:
     _HTTPX_MAJOR_MINOR = (0, 27)
 _HTTPX_PROXY_KW = "proxies" if _HTTPX_MAJOR_MINOR < (0, 26) else "proxy"
+
+# ═══════════════════════════ ADVANCED ANTI-BAN FINGERPRINT ═══════════════════════════
+# Each account gets a persistent "personality" that never changes across restarts.
+# This makes behavioral analysis see consistent human patterns per UID.
+_ACCOUNT_PERSONALITY: Dict[str, Dict[str, Any]] = {}
+_personality_lock = asyncio.Lock()
+
+async def get_account_personality(uid: str) -> Dict[str, Any]:
+    """Get or create a persistent behavioral fingerprint for an account."""
+    async with _personality_lock:
+        if uid not in _ACCOUNT_PERSONALITY:
+            # Deterministic seed from UID so personality is stable across restarts
+            seed = int(hashlib.md5(uid.encode()).hexdigest(), 16) % (2**32)
+            rng = random.Random(seed)
+            
+            # Core personality traits (never change for this UID)
+            _ACCOUNT_PERSONALITY[uid] = {
+                "seed": seed,
+                "preferred_regions": rng.sample(["IND", "IN", "SG", "TH", "MY"], k=3),
+                "play_style": rng.choice(["aggressive", "cautious", "balanced", "explorer"]),
+                "session_length_pref": rng.uniform(1800, 10800),
+                "break_frequency": rng.uniform(0.08, 0.25),
+                "break_duration_mult": rng.uniform(0.8, 2.2),
+                "movement_radius_base": rng.uniform(140, 220),
+                "movement_pattern_bias": rng.choice(["circle", "random", "perimeter", "zigzag"]),
+                "afk_timing_offset": rng.uniform(-0.5, 0.5),
+                "reconnect_patience": rng.uniform(1.2, 3.5),
+                "match_skip_chance": rng.uniform(0.02, 0.12),
+                "peak_hours": [rng.randint(18, 23), rng.randint(0, 2)],
+                "device_quirk": rng.choice(["smooth", "jittery", "delayed", "precise"]),
+                "created": time.time(),
+            }
+        return _ACCOUNT_PERSONALITY[uid]
+
+def apply_personality_to_profile(uid: str, profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge account personality into anti-ban profile for truly unique behavior."""
+    pers = _ACCOUNT_PERSONALITY.get(uid)
+    if not pers:
+        return profile
+    p = dict(profile)
+    p["match_gap"] = (
+        max(5.0, p["match_gap"][0] * (0.7 + pers["break_frequency"])),
+        max(10.0, p["match_gap"][1] * (1.0 + pers["break_duration_mult"] * 0.3))
+    )
+    p["rest_after"] = max(3, int(p["rest_after"] * (0.8 + pers["break_frequency"])))
+    p["rest"] = (
+        int(p["rest"][0] * pers["break_duration_mult"]),
+        int(p["rest"][1] * pers["break_duration_mult"])
+    )
+    p["afk_scale"] *= (0.9 + pers["afk_timing_offset"] * 0.2)
+    p["move_scale"] *= (0.85 + (0.3 if pers["device_quirk"] == "smooth" else 0.15 if pers["device_quirk"] == "jittery" else 0))
+    p["personalized"] = True
+    return p
 
 def next_proxy():
     if not _proxy_cycle:
@@ -292,36 +343,86 @@ def antiban_profile():
     return ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["balanced"])
 
 _antiban_match_runs: Dict[str, int] = {}
+_antiban_session_start: Dict[str, float] = {}
+
+def _get_personalized_profile(uid: str) -> Dict[str, Any]:
+    """Get anti-ban profile personalized for this UID."""
+    base = ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["max"])
+    pers = _ACCOUNT_PERSONALITY.get(str(uid))
+    if not pers:
+        return base
+    p = dict(base)
+    p["match_gap"] = (
+        max(5.0, p["match_gap"][0] * (0.7 + pers["break_frequency"])),
+        max(10.0, p["match_gap"][1] * (1.0 + pers["break_duration_mult"] * 0.3))
+    )
+    p["rest_after"] = max(3, int(p["rest_after"] * (0.8 + pers["break_frequency"])))
+    p["rest"] = (
+        int(p["rest"][0] * pers["break_duration_mult"]),
+        int(p["rest"][1] * pers["break_duration_mult"])
+    )
+    p["afk_scale"] *= (0.9 + pers["afk_timing_offset"] * 0.2)
+    p["move_scale"] *= (0.85 + (0.3 if pers["device_quirk"] == "smooth" else 0.15 if pers["device_quirk"] == "jittery" else 0))
+    p["personalized"] = True
+    return p
 
 async def human_match_gap(uid=""):
     """Randomised, human-like delay between matches with periodic long rests."""
-    p = antiban_profile()
+    uid = str(uid)
+    p = _get_personalized_profile(uid)
+    
+    # Check session length - if too long, force a break
+    session_start = _antiban_session_start.get(uid, time.time())
+    session_len = time.time() - session_start
+    pers = _ACCOUNT_PERSONALITY.get(uid, {})
+    max_session = pers.get("session_length_pref", 7200)
+    
+    if session_len > max_session:
+        # Force long break (simulate "going to sleep" or "work")
+        rest = random.uniform(1800, 7200)
+        try:
+            bot_state.log_sync(uid, f"😴 Session limit reached ({int(session_len/60)}min), long break {int(rest/60)}min", "info")
+        except Exception:
+            pass
+        await asyncio.sleep(rest)
+        _antiban_session_start[uid] = time.time()
+        return
+    
     lo, hi = p["match_gap"]
     gap = random.uniform(lo, hi)
-    if random.random() < 0.28:            # occasional extra "went to get water" pause
+    
+    # Occasional extra pause - "went to get water"
+    if random.random() < 0.28:
         gap += random.uniform(6.0, 30.0)
+    
+    # Peak hours awareness - slower during off-peak
+    hour = datetime.now().hour
+    peak = pers.get("peak_hours", [19, 22])
+    if hour < peak[0] and hour > peak[1]:
+        gap *= 1.3  # slower when not peak hours
+    
     await asyncio.sleep(gap)
+    
     if p["rest_after"] > 0:
-        uid = str(uid)
         _antiban_match_runs[uid] = _antiban_match_runs.get(uid, 0) + 1
         if _antiban_match_runs[uid] % p["rest_after"] == 0:
             rlo, rhi = p["rest"]
             rest = random.uniform(rlo, rhi)
             try:
-                bot_state.log_sync(uid, f"😴 Anti-ban rest for {int(rest)}s after {p['rest_after']} matches", "info")
+                bot_state.log_sync(uid, f"😴 Anti-ban rest {int(rest)}s after {p['rest_after']} matches", "info")
             except Exception:
                 pass
             await asyncio.sleep(rest)
 
 def antiban_snapshot():
-    p = antiban_profile()
+    base = ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["max"])
     return {
         "level": ANTI_BAN_LEVEL,
-        "match_gap": list(p["match_gap"]),
-        "rest_after": p["rest_after"],
-        "rest": list(p["rest"]),
-        "afk_scale": p["afk_scale"],
-        "move_scale": p["move_scale"],
+        "match_gap": list(base["match_gap"]),
+        "rest_after": base["rest_after"],
+        "rest": list(base["rest"]),
+        "afk_scale": base["afk_scale"],
+        "move_scale": base["move_scale"],
         "available": list(ANTI_BAN_PROFILES.keys()),
     }
 
@@ -1508,36 +1609,49 @@ async def build_movement_packet_2001(key_bytes, msg_key, player_state, x, y, z,
 
 class MovementTracker:
     PLAYER_STATE = {"idle":0, "walk":1, "run":2, "sprint":3, "jump":4, "crouch":5, "prone":6}
-    def __init__(self, pattern="circle", radius=180):
-        self.pattern = pattern; self.radius = int(radius)
+    def __init__(self, pattern="circle", radius=180, uid=""):
+        pers = _ACCOUNT_PERSONALITY.get(str(uid), {})
+        self.pattern = pers.get("movement_pattern_bias", pattern)
+        self.radius = int(pers.get("movement_radius_base", radius))
         self.tick = 0; self.counter = 0
         self.angle = random.uniform(0, 6.2832)
         self.speed_multiplier = 1.0; self.dir_flip = 1
         self._next_speed_roll = time.time()
         self.state = "walk"; self.state_start = time.time()
         self.state_duration = random.uniform(2.0, 4.0)
+        self.device_quirk = pers.get("device_quirk", "smooth")
         self._roll_new_speed()
     def _roll_new_speed(self):
         try:
             lo, hi = float(MOVEMENT_SPEED_MIN), float(MOVEMENT_SPEED_MAX)
             if hi < lo: lo, hi = hi, lo
-            self.speed_multiplier = round(random.uniform(lo, hi), 2)
+            base = round(random.uniform(lo, hi), 2)
+            # Apply device quirk
+            if self.device_quirk == "jittery": base *= random.uniform(0.7, 1.4)
+            elif self.device_quirk == "delayed": base *= random.uniform(0.6, 1.1)
+            elif self.device_quirk == "precise": base *= random.uniform(0.95, 1.05)
+            self.speed_multiplier = base
         except Exception: self.speed_multiplier = 1.0
         self._next_speed_roll = time.time() + MOVEMENT_UPDATE_SPEED_EVERY
     def _pick_next_state(self):
+        pers = _ACCOUNT_PERSONALITY.get(str(self._uid), {}) if hasattr(self, '_uid') else {}
+        play_style = pers.get("play_style", "balanced")
+        # Adjust chances based on play style
+        if play_style == "aggressive":
+            ci, cw, cr, cs, cj, cc = 0.05, 0.15, 0.30, 0.30, 0.10, 0.10
+        elif play_style == "cautious":
+            ci, cw, cr, cs, cj, cc = 0.15, 0.30, 0.25, 0.10, 0.05, 0.15
+        elif play_style == "explorer":
+            ci, cw, cr, cs, cj, cc = 0.08, 0.25, 0.20, 0.15, 0.12, 0.10
+        else:  # balanced
+            ci, cw, cr, cs, cj, cc = 0.10, 0.28, 0.32, 0.10, 0.08, 0.12
         r = random.random()
-        ci = MOVEMENT_STATE_IDLE_CHANCE
-        cw = ci + MOVEMENT_STATE_WALK_CHANCE
-        cr = cw + MOVEMENT_STATE_RUN_CHANCE
-        cs = cr + MOVEMENT_STATE_SPRINT_CHANCE
-        cj = cs + MOVEMENT_STATE_JUMP_CHANCE
-        cc = cj + MOVEMENT_STATE_CROUCH_CHANCE
         if r < ci: return "idle", random.uniform(0.6, 1.6)
-        elif r < cw: return "walk", random.uniform(1.6, 3.0)
-        elif r < cr: return "run", random.uniform(2.0, 4.0)
-        elif r < cs: return "sprint", random.uniform(1.2, 2.5)
-        elif r < cj: return "jump", random.uniform(0.35, 0.65)
-        elif r < cc: return "crouch", random.uniform(1.2, 2.5)
+        elif r < ci+cw: return "walk", random.uniform(1.6, 3.0)
+        elif r < ci+cw+cr: return "run", random.uniform(2.0, 4.0)
+        elif r < ci+cw+cr+cs: return "sprint", random.uniform(1.2, 2.5)
+        elif r < ci+cw+cr+cs+cj: return "jump", random.uniform(0.35, 0.65)
+        elif r < ci+cw+cr+cs+cj+cc: return "crouch", random.uniform(1.2, 2.5)
         else: return "prone", random.uniform(1.5, 3.5)
     def _generate_movement(self):
         p = (self.pattern or "circle").lower()
@@ -1550,7 +1664,23 @@ class MovementTracker:
             y = int(self.radius * random.uniform(0.4, 0.6))
             z = int(self.radius * random.uniform(0.9, 1.1) * (1.0 if self.angle % 6.28 < 3.14 else -1.0))
             ms = 0x0F
-        else:
+        elif p == "perimeter":
+            # Move along edges of the map
+            self.angle += 0.25 * self.dir_flip
+            if self.angle > 6.2832: self.angle -= 6.2832
+            edge = self.angle < 1.57 or self.angle > 4.71
+            x = int(self.radius * (1.0 if edge else random.uniform(0.2, 0.8)) * (1.0 if self.angle < 3.14 else -1.0))
+            y = int(self.radius * random.uniform(0.3, 0.5))
+            z = int(self.radius * (1.0 if not edge else random.uniform(0.2, 0.8)) * (1.0 if self.angle < 3.14 else -1.0))
+            ms = 0x0F
+        elif p == "zigzag":
+            self.angle += 0.5 * self.dir_flip
+            if self.angle > 6.2832: self.angle -= 6.2832
+            x = int(self.radius * random.uniform(0.8, 1.0) * (1.0 if self.angle % 1.57 < 0.78 else -1.0))
+            y = int(self.radius * random.uniform(0.3, 0.5))
+            z = int(self.radius * random.uniform(0.8, 1.0) * (1.0 if self.angle % 1.57 < 0.78 else -1.0))
+            ms = 0x0F
+        else:  # random
             x = random.randint(-self.radius, self.radius)
             y = random.randint(-40, 40)
             z = random.randint(-self.radius, self.radius)
@@ -1571,7 +1701,7 @@ class MovementTracker:
 
 async def movement_worker(sock, ip, port, udp_key_bytes, match_code, account_id, stop_event, match_index):
     loop = asyncio.get_event_loop(); addr = (ip, port)
-    tracker = MovementTracker(pattern=MOVEMENT_PATTERN, radius=MOVEMENT_RADIUS)
+    tracker = MovementTracker(pattern=MOVEMENT_PATTERN, radius=MOVEMENT_RADIUS, uid=account_id)
     sent = 0
     try:
         await asyncio.sleep(bypass_jitter(3.0, 0.5))
@@ -1585,7 +1715,7 @@ async def movement_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
                 try: smx = max(0.7, min(float(sm), 1.6))
                 except Exception: smx = 1.0
                 wait = max(0.10, min(base / smx, 0.40))
-                wait = bypass_packet_jitter(wait, 0.20) * antiban_profile()["move_scale"]
+                wait = bypass_packet_jitter(wait, 0.20) * _get_personalized_profile(account_id)["move_scale"]
                 try: await asyncio.wait_for(stop_event.wait(), timeout=wait); break
                 except asyncio.TimeoutError: pass
             except asyncio.CancelledError: break
@@ -1618,7 +1748,7 @@ async def anti_afk_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
             try:
                 if await send_anti_afk_fire(sock, addr, udp_key_bytes, match_code, account_id): fires += 1
                 w = random.uniform(ANTI_AFK_MIN_INTERVAL, ANTI_AFK_MAX_INTERVAL)
-                w = bypass_packet_jitter(w, 0.25) * antiban_profile()["afk_scale"]
+                w = bypass_packet_jitter(w, 0.25) * _get_personalized_profile(account_id)["afk_scale"]
                 try: await asyncio.wait_for(stop_event.wait(), timeout=w); break
                 except asyncio.TimeoutError: pass
             except asyncio.CancelledError: break
@@ -1634,6 +1764,10 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
     sock = None
     ping_stop = asyncio.Event(); anti_stop = asyncio.Event(); move_stop = asyncio.Event()
     uid_str = str(account_id); completed = False
+    # Initialize account personality for this session
+    await get_account_personality(uid_str)
+    _antiban_session_start[uid_str] = time.time()
+    _antiban_match_runs[uid_str] = 0
     try:
         ip, port = server_ip_port.split(":"); port = int(port)
         rip = await resolve_host_cloudflare(ip)
@@ -3861,6 +3995,8 @@ async def start_web_server():
         return None
     try:
         app = aioweb.Application()
+        # Static files
+        app.router.add_static('/static/', path=STATIC_DIR, name='static')
         app.router.add_get("/", web_index)
         app.router.add_get("/health", web_health)
         app.router.add_get("/healthz", web_health)
