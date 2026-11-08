@@ -4347,6 +4347,164 @@ async def web_squad_logs(request):
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
 
+async def web_auto_setup(request):
+    """Full automation: create guest accounts → squads → join guild → start all → glory."""
+    chk = _require_admin(request)
+    if chk: return chk
+    try:
+        body = await request.json()
+        squad_count = int(body.get("squad_count", 1) or 1)
+        guild_id = str(body.get("guild_id", "")).strip()
+        if squad_count < 1 or squad_count > 20:
+            return aioweb.json_response({"ok": False, "error": "squad_count must be 1-20"})
+        if not guild_id:
+            return aioweb.json_response({"ok": False, "error": "guild_id required"})
+
+        created = []
+        errors = []
+
+        for i in range(squad_count):
+            try:
+                # Try auto guest creation via Garena
+                ad = await _auto_create_guest_account()
+                if not ad:
+                    errors.append(f"Squad {i+1}: Garena guest creation failed — create guest in Free Fire app manually")
+                    continue
+
+                # Register account
+                acc_id = str(ad["account_id"])
+                pw = ad.get("password", str(ad.get("auth_uid", acc_id)))
+                bot_state.register_account(
+                    uid=acc_id,
+                    nickname=f"Auto_{acc_id[:6]}",
+                    region=DEFAULT_REGION,
+                    level=ad.get("level", 1),
+                    exp=ad.get("exp", 0),
+                    likes=ad.get("likes", 0),
+                    password=pw,
+                    slot=1,
+                )
+                bot_state.accounts[acc_id]["auth_type"] = "guest"
+                bot_state.accounts[acc_id]["auth_uid"] = str(ad.get("auth_uid", acc_id))
+                bot_state.accounts[acc_id]["auth_password"] = pw
+                created.append((acc_id, pw))
+
+                # Create 1-account squad
+                ok, msg, sid = await squad_mgr.create_squad([(acc_id, pw)])
+                if not ok:
+                    errors.append(f"Squad {i+1}: {msg}")
+                    continue
+
+                # Start squad
+                ok2, msg2 = await squad_mgr.start_squad(sid)
+                if not ok2:
+                    errors.append(f"Squad {sid}: start failed — {msg2}")
+
+            except Exception as e:
+                errors.append(f"Squad {i+1}: {str(e)}")
+
+        # Join all created accounts to guild
+        guild_results = []
+        if created and guild_id:
+            uids = [u for u, _ in created]
+            jid = await bot_state.new_guild_job(guild_id, "JOIN", uids)
+            delay = 0.8; workers = 3
+            asyncio.create_task(guild_run_join_or_leave(jid, guild_id, "JOIN", created, delay, workers))
+            guild_results.append({"job_id": jid, "guild_id": guild_id, "accounts": len(uids)})
+
+        return aioweb.json_response({
+            "ok": True,
+            "squads_created": len(created),
+            "squads_requested": squad_count,
+            "guild_id": guild_id,
+            "guild_jobs": guild_results,
+            "errors": errors,
+            "message": f"{len(created)} squad(s) created and started. Join guild job(s) dispatched.",
+        })
+    except Exception as e:
+        return aioweb.json_response({"ok": False, "error": str(e)})
+
+async def _auto_create_guest_account():
+    """Try to auto-create a Free Fire guest account via Garena OAuth grant endpoint."""
+    try:
+        import uuid, json
+        device_id = str(uuid.uuid4())
+        grant_url = "https://100067.connect.garena.com/oauth/guest/token/grant"
+        hdrs = {
+            "Host": "100067.connect.garena.com",
+            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12; SM-G998B)",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "close",
+        }
+        grant_data = {
+            "response_type": "token",
+            "client_type": "2",
+            "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+            "client_id": "100067",
+            "device_id": device_id,
+        }
+
+        oid = at = pf = None
+        for attempt in range(5):
+            try:
+                r = await client.post(grant_url, headers=hdrs, data=grant_data)
+                if r.status_code == 200:
+                    d = r.json()
+                    oid = d.get("open_id") or d.get("uid")
+                    at = d.get("access_token") or d.get("token")
+                    pf = d.get("platform", 4)
+                    if oid and at:
+                        break
+                if r.status_code == 429:
+                    await asyncio.sleep(1); continue
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+
+        if not oid or not at:
+            return None
+
+        uid = str(oid)
+        vc = await version_config()
+        if not vc:
+            return None
+        rel, cv, su = vc
+
+        dev = get_device_for_account(uid)
+        lpd = await build_majorlogin_payload(uid, at, str(pf), cv, dev)
+        if not lpd:
+            return None
+
+        mresp = await send_majorlogin(lpd, rel, su)
+        if mresp is None:
+            return None
+
+        gl = await send_getlogin(lpd, mresp.url, mresp.token, rel)
+        if gl is None:
+            return None
+
+        rp, dd = gl
+        acc_id = str(mresp.account_id)
+        level = int(get_proto_field(dd, 6, 1) or 1)
+        exp = int(get_proto_field(dd, 7, 0) or 0)
+        likes = int(get_proto_field(dd, 8, 0) or 0)
+        nick = rp.nickname or get_proto_field(dd, 4, f"Player_{acc_id}")
+        region = mresp.region or get_proto_field(dd, 3, "BD")
+
+        return {
+            "account_id": acc_id,
+            "nickname": nick,
+            "region": region,
+            "level": level,
+            "exp": exp,
+            "likes": likes,
+            "auth_uid": uid,
+            "password": device_id,
+        }
+    except Exception:
+        return None
+
 async def web_guild_one(request):
     chk = _require_admin(request)
     if chk: return chk
@@ -4553,6 +4711,7 @@ async def start_web_server():
         app.router.add_get("/api/squad/logs", web_squad_logs)
         app.router.add_post("/api/guild/one", web_guild_one)
         app.router.add_post("/api/guild/run", web_guild_run)
+        app.router.add_post("/api/auto/setup", web_auto_setup)
         app.router.add_get("/api/guild/jobs", web_guild_jobs)
 
         async def handle_ping(request):

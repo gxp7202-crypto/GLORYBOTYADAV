@@ -210,6 +210,10 @@ async function renderDashboard(first){
   const failed = d.failed_uids||[]; const c = $id('content'); if(!c) return;
   let html = topbar('Dashboard','Real-time overview')+'\n    <div class="grid-stats">\n      <div class="stat"><span class="ico">\uD83D\uDEE1\uFE0F</span><div class="lbl">Active Squads</div><div class="num">'+fmt(d.total_squads)+'</div></div>\n      <div class="stat g"><span class="ico">\uD83D\uDC65</span><div class="lbl">Accounts</div><div class="num">'+fmt(d.total_accounts)+'</div></div>\n      <div class="stat c"><span class="ico">\u2694\uFE0F</span><div class="lbl">Total Matches</div><div class="num">'+fmt(d.total_matches)+'</div></div>\n      <div class="stat v"><span class="ico">\u2699\uFE0F</span><div class="lbl">Live Workers</div><div class="num">'+fmt(d.active_workers)+'</div></div>\n    </div>';
   if(failed.length) html += '<div class="alert red"><span class="ai">\u26A0\uFE0F</span><div><b>'+failed.length+' account(s) failed guild op:</b><br>'+failed.map(esc).join(', ')+' \u2014 try again with fresh IDs.</div></div>';
+
+  /* Auto-setup panel */
+  html += '\n    <div class="form-card" style="margin-top:24px">\n      <h3>\u26A1 Auto Setup All</h3>\n      <p class="hint">Khud sab hoga: guest accounts \u2192 squads \u2192 guild join \u2192 start \u2192 glory. Aap sirf quantity aur guild ID dein.</p>\n      <div class="form-2col">\n        <div><label class="label">Kitni Squads</label><input class="inp" id="autoCount" type="number" value="3" min="1" max="20"></div>\n        <div><label class="label">Guild ID</label><input class="inp" id="autoGuild" placeholder="Guild ID"></div>\n      </div>\n      <button class="btn go" style="width:100%;margin-top:16px" onclick="autoSetup()">\u26A1 Auto Setup All — Start Glory</button>\n      <span id="autoStatus" style="margin-top:12px;display:block;font-size:13px;color:var(--txt-dim)"></span>\n    </div>';
+
   html += '<div class="section-title"><span class="bar"></span>Squads</div><div id="squadsWrap"></div>';
   c.innerHTML = html;
   const wrap = $id('squadsWrap');
@@ -255,6 +259,23 @@ async function createGuestAccount(){
   }else{
     st.textContent = 'Failed: '+r.error;
     toast('Guest create failed: '+r.error,'err');
+  }
+}
+
+async function autoSetup(){
+  const st = $id('autoStatus');
+  const count = Number($id('autoCount').value)||1;
+  const guild = $id('autoGuild').value.trim();
+  if(!guild) return toast('Guild ID required','warn');
+  st.textContent = 'Auto setup running... guest accounts → squads → guild → start';
+  const r = await api('/api/auto/setup',{method:'POST',body:{squad_count:count,guild_id:guild}});
+  if(r.ok){
+    st.textContent = 'Done: '+r.squads_created+'/'+r.squads_requested+' squads, guild job '+ (r.guild_jobs[0]?.job_id||'—');
+    toast('Auto setup: '+r.message,'ok');
+    renderDashboard(false);
+  }else{
+    st.textContent = 'Failed: '+r.error;
+    toast('Auto setup failed: '+r.error,'err');
   }
 }
 
