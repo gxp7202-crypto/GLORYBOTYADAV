@@ -3665,6 +3665,12 @@ async def web_health(request):
     return aioweb.json_response({"ok": True, "brand": BRAND_NAME, "status": "healthy"})
 
 async def web_login(request):
+    cors = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+        "Access-Control-Allow-Headers": "Content-Type, X-Admin-Token, Authorization",
+        "Access-Control-Allow-Credentials": "true",
+    }
     try:
         body = await request.json()
         pw = str(body.get("password", "")).strip()
@@ -3673,12 +3679,12 @@ async def web_login(request):
             tok = secrets.token_hex(24)
             ADMIN_SESSIONS.add(tok)
             print_success(f"[LOGIN] success token={tok[:12]}...")
-            return aioweb.json_response({"ok": True, "token": tok})
+            return aioweb.json_response({"ok": True, "token": tok}, headers=cors)
         print_error(f"[LOGIN] wrong password from {request.remote}")
-        return aioweb.json_response({"ok": False, "error": "Wrong password"})
+        return aioweb.json_response({"ok": False, "error": "Wrong password"}, headers=cors, status=401)
     except Exception as e:
         print_error(f"[LOGIN] error: {e}")
-        return aioweb.json_response({"ok": False, "error": str(e)})
+        return aioweb.json_response({"ok": False, "error": str(e)}, headers=cors, status=500)
 
 def _require_admin(request):
     if not _check_admin(request):
@@ -3994,20 +4000,32 @@ async def web_guild_jobs(request):
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
 
-@aioweb.middleware
-async def _cors_middleware(request, handler):
-    try:
-        resp = await handler(request)
-    except aioweb.HTTPException as ex:
-        resp = ex
-    except Exception as ex:
-        print_error(f"[MIDDLEWARE] unhandled error: {ex}")
-        resp = aioweb.json_response({"ok": False, "error": "internal server error"}, status=500)
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token, Authorization"
-    resp.headers["Access-Control-Allow-Credentials"] = "true"
-    return resp
+def _cors_middleware(app, handler):
+    async def middleware_handler(request):
+        # CORS preflight
+        if request.method == "OPTIONS":
+            return aioweb.Response(
+                text="", status=200,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+                    "Access-Control-Allow-Headers": "Content-Type, X-Admin-Token, Authorization",
+                    "Access-Control-Allow-Credentials": "true",
+                },
+            )
+        try:
+            resp = await handler(request)
+        except aioweb.HTTPException as ex:
+            resp = ex
+        except Exception as ex:
+            print_error(f"[MIDDLEWARE] unhandled error: {ex}")
+            resp = aioweb.json_response({"ok": False, "error": "internal server error"}, status=500)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token, Authorization"
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        return resp
+    return middleware_handler
 
 async def start_web_server():
     if not _HAS_AIOHTTP:
@@ -4038,9 +4056,9 @@ async def start_web_server():
         app.router.add_post("/api/guild/run", web_guild_run)
         app.router.add_get("/api/guild/jobs", web_guild_jobs)
 
-        async def handle_options(request):
-            return aioweb.Response(text="", status=200)
-        app.router.add_options("/{path:.*}", handle_options)
+        async def handle_ping(request):
+            return aioweb.json_response({"ok": True, "brand": BRAND_NAME, "status": "alive"})
+        app.router.add_get("/api/ping", handle_ping)
 
         runner = aioweb.AppRunner(app)
         await runner.setup()
