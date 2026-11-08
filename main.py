@@ -3668,12 +3668,16 @@ async def web_login(request):
     try:
         body = await request.json()
         pw = str(body.get("password", "")).strip()
+        print_info(f"[LOGIN] attempt from {request.remote} password={'set' if pw else 'empty'}")
         if pw == ADMIN_PASSWORD:
             tok = secrets.token_hex(24)
             ADMIN_SESSIONS.add(tok)
+            print_success(f"[LOGIN] success token={tok[:12]}...")
             return aioweb.json_response({"ok": True, "token": tok})
+        print_error(f"[LOGIN] wrong password from {request.remote}")
         return aioweb.json_response({"ok": False, "error": "Wrong password"})
     except Exception as e:
+        print_error(f"[LOGIN] error: {e}")
         return aioweb.json_response({"ok": False, "error": str(e)})
 
 def _require_admin(request):
@@ -3990,12 +3994,23 @@ async def web_guild_jobs(request):
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
 
+async def _cors_middleware(request, handler):
+    try:
+        resp = await handler(request)
+    except aioweb.HTTPException as ex:
+        resp = ex
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token, Authorization"
+    resp.headers["Access-Control-Allow-Credentials"] = "true"
+    return resp
+
 async def start_web_server():
     if not _HAS_AIOHTTP:
         print_error("aiohttp not installed! Run: pip install aiohttp")
         return None
     try:
-        app = aioweb.Application()
+        app = aioweb.Application(middlewares=[_cors_middleware])
         # Static files
         app.router.add_static('/static/', path=STATIC_DIR, name='static')
         app.router.add_get("/", web_index)
@@ -4018,6 +4033,11 @@ async def start_web_server():
         app.router.add_post("/api/guild/one", web_guild_one)
         app.router.add_post("/api/guild/run", web_guild_run)
         app.router.add_get("/api/guild/jobs", web_guild_jobs)
+
+        async def handle_options(request):
+            return aioweb.Response(text="", status=200)
+        app.router.add_options("/{path:.*}", handle_options)
+
         runner = aioweb.AppRunner(app)
         await runner.setup()
         site = aioweb.TCPSite(runner, WEB_HOST, WEB_PORT)

@@ -44,12 +44,19 @@ async function api(path, opts={}){
   opts.headers = opts.headers || {};
   if(token) opts.headers['X-Admin-Token'] = token;
   if(opts.body && typeof opts.body!=='string'){opts.body=JSON.stringify(opts.body);opts.headers['Content-Type']='application/json';}
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=>controller.abort(), 15000);
+  opts.signal = controller.signal;
   try{
     const r = await fetch(API+path, opts);
+    clearTimeout(timeoutId);
     const j = await r.json().catch(()=>({ok:false,error:'bad json'}));
     if(r.status===401){ logout(true); }
     return j;
-  }catch(e){ return {ok:false,error:'network error'}; }
+  }catch(e){
+    clearTimeout(timeoutId);
+    return {ok:false,error:e.name==='AbortError'?'request timeout':'network error'};
+  }
 }
 
 function toast(msg, type='info'){
@@ -73,12 +80,17 @@ function confirmBox(title, text){
 }
 
 async function doLogin(){
-  const pw = $id('pw').value; if(!pw) return toast('Enter the password','warn');
-  const btn = $id('loginBtn'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> UNLOCKING\u2026';
-  const r = await api('/api/login',{method:'POST',body:{password:pw}});
-  btn.disabled=false; btn.textContent='UNLOCK DASHBOARD';
-  if(r.ok){ token=r.token; localStorage.setItem('ylu_token',token); enterApp(); toast('PREMIUM UNLOCKED — welcome back, boss \uD83C\uDDEE\uD83C\uDDF3','ok'); }
-  else { toast(r.error||'Wrong password','err'); }
+  try{
+    const pw = $id('pw').value; if(!pw) return toast('Enter the password','warn');
+    const btn = $id('loginBtn'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> UNLOCKING\u2026';
+    const r = await api('/api/login',{method:'POST',body:{password:pw}});
+    btn.disabled=false; btn.textContent='UNLOCK DASHBOARD';
+    if(r.ok){ token=r.token; localStorage.setItem('ylu_token',token); enterApp(); toast('PREMIUM UNLOCKED — welcome back, boss \uD83C\uDDEE\uD83C\uDDF3','ok'); }
+    else { toast(r.error||'Wrong password','err'); }
+  }catch(e){
+    const btn = $id('loginBtn'); if(btn){ btn.disabled=false; btn.textContent='UNLOCK DASHBOARD'; }
+    toast('Login error: '+String(e),'err');
+  }
 }
 
 function logout(silent){
