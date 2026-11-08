@@ -4026,6 +4026,69 @@ async def web_health(request):
         "version": "7.0.0"
     })
 
+async def web_create_guest(request):
+    """Auto-create a Free Fire guest account via Garena OAuth and register it."""
+    chk = _require_admin(request)
+    if chk: return chk
+    try:
+        import random, string, uuid
+        # Generate random guest credentials (10-digit UID like Free Fire)
+        uid = "".join(random.choices(string.digits, k=10))
+        password = "".join(random.choices(string.ascii_letters + string.digits, k=12))
+        device_id = str(uuid.uuid4())
+
+        # Step 1: Request guest token from Garena OAuth
+        try:
+            tg = await get_access_token(uid, password)
+        except Exception:
+            tg = None
+        if not tg:
+            # Garena rejected — user must create guest account in Free Fire app first
+            return aioweb.json_response({
+                "ok": False,
+                "error": "Guest auto-create failed: Garena rejected credentials. "
+                         "Open Free Fire app → Login as Guest → copy UID + Password → paste here.",
+                "uid": uid
+            })
+
+        oid, at, pf = tg
+
+        # Step 2: Full login flow to get account details
+        ad = await process_account_uid_pass(uid, password, _skip_cache=True)
+        if not ad:
+            return aioweb.json_response({
+                "ok": False,
+                "error": "Guest token obtained but account fetch failed.",
+                "uid": uid
+            })
+
+        # Step 3: Register in dashboard
+        bot_state.register_account(
+            uid=str(ad['account_id']),
+            nickname=f"Guest_{str(ad['account_id'])[:6]}",
+            region=DEFAULT_REGION,
+            level=ad.get('level', 1),
+            exp=ad.get('exp', 0),
+            likes=ad.get('likes', 0),
+            password=password,
+            slot=0
+        )
+        bot_state.accounts[str(ad['account_id'])]['auth_type'] = 'guest'
+        bot_state.accounts[str(ad['account_id'])]['auth_uid'] = uid
+        bot_state.accounts[str(ad['account_id'])]['auth_password'] = password
+        bot_state.log_sync(str(ad['account_id']), "Guest account auto-created via Garena OAuth", "success")
+
+        return aioweb.json_response({
+            "ok": True,
+            "uid": str(ad['account_id']),
+            "nickname": f"Guest_{str(ad['account_id'])[:6]}",
+            "password": password,
+            "level": ad.get('level', 1),
+            "region": ad.get('region', DEFAULT_REGION)
+        })
+    except Exception as e:
+        return aioweb.json_response({"ok": False, "error": str(e)})
+
 async def web_login(request):
     try:
         body = await request.json()
@@ -4478,6 +4541,7 @@ async def start_web_server():
         app.router.add_get("/health", web_health)
         app.router.add_get("/healthz", web_health)
         app.router.add_get("/api/health", web_health)
+        app.router.add_post("/api/account/guest", web_create_guest)
         app.router.add_post("/api/login", web_login)
         app.router.add_get("/api/status", web_status)
         app.router.add_get("/api/glory", web_glory)

@@ -237,8 +237,21 @@ async function renderCreate(){
   let rows=''; for(let i=1;i<=4;i++){
     rows+='<div class="member-row"><span class="sl">Slot '+i+'</span><input class="inp" id="cuid'+i+'" placeholder="Game UID" inputmode="numeric"><input class="inp" id="cpw'+i+'" type="password" placeholder="Password"></div>';
   }
-  $id('content').innerHTML = topbar('Create Squad','Add up to 4 accounts')+'\n    <div class="form-card"><h3>\u2795 New Squad</h3><p class="hint">Enter UID + password for 1\u20134 accounts. Create builds the squad; then hit <b>Start</b> on the dashboard to begin matchmaking.</p>'+rows+'\n    <button class="btn go" style="width:100%;justify-content:center;padding:16px;font-size:16px;margin-top:18px" id="createBtn" onclick="createSquad()">\u2705 Create Squad</button></div>';
+  $id('content').innerHTML = topbar('Create Squad','Add up to 4 accounts')+'\n    <div class="form-card"><h3>\u2795 New Squad</h3><p class="hint">Enter UID + password for 1\u20134 accounts. Create builds the squad; then hit <b>Start</b> on the dashboard to begin matchmaking.</p>'+rows+'\n    <div class="form-row" style="margin-top:14px"><button class="btn info" onclick="createGuestAccount()" style="background:linear-gradient(135deg,#8b7bff,#5b4bcc);color:#fff;border:none;width:100%">\uD83D\uDC7B Create Guest Account (Auto)</button><span id="guestStatus" style="margin-left:12px;font-size:13px;color:var(--txt-dim);margin-top:8px;display:block"></span></div>\\n    <button class="btn go" style="width:100%;justify-content:center;padding:16px;font-size:16px;margin-top:18px" id="createBtn" onclick="createSquad()">\u2705 Create Squad</button></div>';
 }
+async function createGuestAccount(){
+  const st = $id('guestStatus'); st.textContent = 'Creating guest account via Garena...';
+  const r = await api('/api/account/guest',{method:'POST'});
+  if(r.ok){
+    st.textContent = 'Created: '+r.nickname+' (UID: '+r.uid+', Pass: '+r.password+') \u2705';
+    toast('Guest account '+r.nickname+' created! Level '+r.level+'.','ok');
+    setTimeout(()=>renderDashboard(false), 800);
+  }else{
+    st.textContent = 'Failed: '+r.error;
+    toast('Guest create failed: '+r.error,'err');
+  }
+}
+
 async function createSquad(){ const members=[]; for(let i=1;i<=4;i++){ const uid=$id('cuid'+i).value.trim(); const pw=$id('cpw'+i).value.trim(); if(uid&&pw) members.push({uid,password:pw}); }
   if(!members.length) return toast('Add at least 1 UID + password','warn');
   const b=$id('createBtn'); b.disabled=true; b.innerHTML='<span class="spin"></span> Creating\u2026';
