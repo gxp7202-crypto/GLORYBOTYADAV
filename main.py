@@ -3994,11 +3994,15 @@ async def web_guild_jobs(request):
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
 
+@aioweb.middleware
 async def _cors_middleware(request, handler):
     try:
         resp = await handler(request)
     except aioweb.HTTPException as ex:
         resp = ex
+    except Exception as ex:
+        print_error(f"[MIDDLEWARE] unhandled error: {ex}")
+        resp = aioweb.json_response({"ok": False, "error": "internal server error"}, status=500)
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token, Authorization"
