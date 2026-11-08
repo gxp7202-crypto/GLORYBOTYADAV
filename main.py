@@ -428,7 +428,7 @@ def _download_source(url: str, timeout: int = 12) -> str:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read(900_000).decode("utf-8", "ignore")
+            return r.read(400_000).decode("utf-8", "ignore")
     except Exception:
         return ""
 
@@ -479,10 +479,18 @@ async def fetch_free_proxies(limit: int = MAX_AUTO_PROXIES, validate: bool = Tru
         return {"ok": False, "error": "already running", **PROXY_FETCH_STATE}
     PROXY_FETCH_STATE.update({"running": True, "last_error": None, "candidates": 0, "alive": 0})
     try:
-        raw = await asyncio.gather(*[asyncio.to_thread(_download_source, u) for _, u in PROXY_SOURCES])
+        async def _dl(scheme: str, url: str):
+            try:
+                text = await asyncio.wait_for(
+                    asyncio.to_thread(_download_source, url, 8), timeout=20
+                )
+            except Exception:
+                text = ""
+            return scheme, text
+        raw = await asyncio.gather(*[_dl(s, u) for s, u in PROXY_SOURCES])
         seen = set()
         candidates: List[str] = []
-        for (scheme, _url), text in zip(PROXY_SOURCES, raw):
+        for scheme, text in raw:
             for line in text.splitlines():
                 p = _normalise_proxy(line, scheme)
                 if p and p not in seen:
