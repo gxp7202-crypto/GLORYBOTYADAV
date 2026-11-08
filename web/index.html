@@ -408,6 +408,41 @@ body::before{content:"";position:fixed;inset:-30%;z-index:-2;pointer-events:none
   .sidebar{width:100%}
   .premium-2col{grid-template-columns:1fr}
 }
+
+/* ═══════════ ANTI-CHEAT STACK GRID ═══════════ */
+.ab-card,.antiban-card{padding-bottom:22px}
+.ac-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:6px}
+.ac-head h3{margin-bottom:0!important}
+.ac-count{display:flex;flex-direction:column;align-items:flex-end;line-height:1;
+  padding:9px 14px;border-radius:13px;border:1px solid rgba(31,174,100,.35);
+  background:linear-gradient(160deg,rgba(31,174,100,.16),rgba(31,174,100,.04));
+  box-shadow:0 0 26px -10px rgba(31,174,100,.65),inset 0 1px 0 rgba(255,255,255,.1)}
+.ac-count b{font-family:var(--display);font-size:22px;font-weight:800;color:var(--good);letter-spacing:-1px}
+.ac-count span{margin-top:3px;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--txt-dim);font-weight:700}
+
+.ac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:14px}
+.ac-layer{position:relative;display:flex;align-items:flex-start;gap:10px;
+  padding:11px 12px;border-radius:13px;border:1px solid rgba(255,255,255,.07);
+  background:linear-gradient(150deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
+  transition:transform .25s cubic-bezier(.2,.9,.25,1),border-color .25s,box-shadow .25s,background .25s}
+.ac-layer:hover{transform:translateY(-3px);border-color:rgba(31,174,100,.4);
+  background:linear-gradient(150deg,rgba(31,174,100,.11),rgba(255,255,255,.02));
+  box-shadow:0 16px 34px -22px rgba(0,0,0,1),0 0 0 1px rgba(31,174,100,.16)}
+.ac-layer .n{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--txt-faint);
+  letter-spacing:.5px;padding-top:2px;min-width:16px}
+.ac-layer .txt{flex:1;min-width:0}
+.ac-layer .l{font-size:12.5px;font-weight:700;color:var(--txt);letter-spacing:.15px}
+.ac-layer .d{font-size:10.5px;color:var(--txt-dim);margin-top:3px;line-height:1.45}
+.ac-layer .dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none;
+  background:var(--good);box-shadow:0 0 10px 1px rgba(34,209,122,.9);
+  animation:layerPulse 2.6s ease-in-out infinite}
+.ac-layer .dot.off{background:var(--bad);box-shadow:0 0 10px 1px rgba(255,77,94,.9);animation:none}
+@keyframes layerPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.82)}}
+@media(max-width:600px){
+  .ac-grid{grid-template-columns:1fr}
+  .ac-head{flex-direction:column;gap:10px}
+  .ac-count{align-items:flex-start}
+}
 </style>
 </head>
 <body>
@@ -431,6 +466,6 @@ body::before{content:"";position:fixed;inset:-30%;z-index:-2;pointer-events:none
 
 <div id="app"></div>
 
-<script src="/static/app.js?v=9"></script>
+<script src="/static/app.js?v=10"></script>
 </body>
 </html>

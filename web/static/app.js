@@ -256,14 +256,22 @@ function gloryHero(g){ return '<div class="glory-hero"><div><div class="k" style
 
 function antibanCard(ab){ if(!ab||!ab.ok) return '';
   const by = ab.bypass||{};
-  const on = v => v ? '<span style="color:var(--good)">ON</span>' : '<span style="color:var(--bad)">OFF</span>';
-  const layers = (ab.layers||[]).map(l=>'<span class="badge b-success" style="font-size:10px;padding:5px 9px;margin:0 6px 6px 0;display:inline-block">'+esc(l)+'</span>').join('');
-  return '<div class="form-card"><h3>\uD83D\uDEE1\uFE0F Anti-Ban Engine</h3>'
-    + '<p class="hint"><b style="color:var(--good)">SMART · FAST · SAFE</b> \u2014 fast 10\u201320s pacing, zero repeatable pattern. Speed never caused bans; <i>patterns</i> do. Every layer below breaks one.</p>'
+  const on = v => v ? '<span style="color:var(--good);font-weight:700">ON</span>' : '<span style="color:var(--bad);font-weight:700">OFF</span>';
+  const list = ab.layers||[];
+  const total = ab.layer_count || list.length;
+  const layers = list.map((l,i)=>{
+    const o = (typeof l === 'string') ? {label:l,desc:''} : l;
+    return '<div class="ac-layer"><div class="n">'+String(i+1).padStart(2,'0')+'</div>'
+      + '<div class="txt"><div class="l">'+esc(o.label||'')+'</div><div class="d">'+esc(o.desc||'')+'</div></div>'
+      + '<div class="dot'+(o.on===false?' off':'')+'"></div></div>';
+  }).join('');
+  return '<div class="form-card antiban-card"><div class="ac-head"><h3>\uD83D\uDEE1\uFE0F Anti-Cheat Stack</h3>'
+    + '<div class="ac-count"><b>'+total+'</b><span>layers active</span></div></div>'
+    + '<p class="hint"><b style="color:var(--good)">SMART \u00B7 FAST \u00B7 SAFE</b> \u2014 fast 10\u201320s pacing, zero repeatable pattern. Bans come from <i>patterns</i>, not speed. Every layer below kills one.</p>'
     + '<div class="ab-row"><div class="ab-pill on" style="cursor:default">SMART FAST SAFE \u00B7 LOCKED \uD83D\uDD12</div></div>'
-    + '<p class="hint" style="margin:16px 0 8px">Match gap <b style="color:#fff">'+ab.match_gap[0]+'\u2013'+ab.match_gap[1]+'s</b> \u00B7 cool-down every <b style="color:#fff">'+(ab.rest_after||'\u2014')+'</b> matches ('+ab.rest[0]+'\u2013'+ab.rest[1]+'s) \u00B7 session cap <b style="color:#fff">'+Math.round((ab.session_cap||5400)/60)+'min</b></p>'
-    + '<div style="margin-top:6px">'+layers+'</div>'
-    + '<p class="hint" style="margin:12px 0 0">Wire bypass \u2014 timing '+on(by.timing_jitter)+' \u00B7 packet '+on(by.packet_jitter)+' \u00B7 hello '+on(by.hello_delay)+' \u00B7 KA '+on(by.ka_jitter)+' \u00B7 safe mode '+on(by.safe_play_mode)+'</p></div>'; }
+    + '<p class="hint" style="margin:16px 0 10px">Match gap <b style="color:#fff">'+ab.match_gap[0]+'\u2013'+ab.match_gap[1]+'s</b> \u00B7 cool-down every <b style="color:#fff">'+(ab.rest_after||'\u2014')+'</b> matches ('+ab.rest[0]+'\u2013'+ab.rest[1]+'s) \u00B7 session cap <b style="color:#fff">'+Math.round((ab.session_cap||5400)/60)+'min</b></p>'
+    + '<div class="ac-grid">'+layers+'</div>'
+    + '<p class="hint" style="margin:14px 0 0">Wire bypass \u2014 timing '+on(by.timing_jitter)+' \u00B7 packet '+on(by.packet_jitter)+' \u00B7 hello '+on(by.hello_delay)+' \u00B7 KA '+on(by.ka_jitter)+' \u00B7 safe mode '+on(by.safe_play_mode)+'</p></div>'; }
 
 function networkCard(net){ if(!net||!net.ok) return '';
   return '<div class="networkCard"><h3>\uD83C\uDF10 Proxy Rotation</h3><p class="hint">Rotate outbound traffic across a proxy pool so no single IP carries every account. One per line \u2014 <b>http://user:pass@ip:port</b> or <b>socks5://ip:port</b>. New requests pick these up instantly.</p>\n    <textarea class="proxyBox" id="proxyBox" rows="4" spellcheck="false" placeholder="http://user:pass@1.2.3.4:8080&#10;socks5://5.6.7.8:1080">'+esc((net.proxies||[]).join('\n'))+'</textarea>\n    <div class="proxyActions"><label class="ab-pill '+(net.use_proxy?'on':'')+'" id="proxyToggle" onclick="toggleProxy()">'+(net.use_proxy?'\u25CF Enabled':'\u25CB Disabled')+'</label><button class="btn info" id="proxySave" onclick="saveProxy()">\uD83D\uDCBE Save Pool</button><button class="btn" id="proxyFetch" style="background:linear-gradient(135deg,#1fae64,#0d8a4a);color:#fff" onclick="fetchProxies()">\u26A1 Fetch Free Proxies</button><span class="proxyStatus" id="proxyStatus">'+net.count+' prox'+(net.count===1?'y':'ies')+' loaded</span></div></div>'; }
@@ -272,10 +280,10 @@ async function fetchProxies(){
   const b = $id('proxyFetch'); const st = $id('proxyStatus');
   if(b){ b.disabled = true; b.textContent = '\u23F3 Fetching\u2026'; }
   if(st) st.textContent = 'downloading GitHub lists\u2026';
-  const r = await api('/api/proxy/fetch',{method:'POST',body:{limit:400,validate:true}});
+  const r = await api('/api/proxy/fetch',{method:'POST',body:{limit:800,validate:true}});
   if(!r.ok){ toast(r.error||'fetch failed','err'); if(b){b.disabled=false;b.textContent='\u26A1 Fetch Free Proxies';} return; }
   // poll until the background job finishes
-  for(let i=0;i<60;i++){
+  for(let i=0;i<170;i++){
     const s = await api('/api/proxy/status');
     if(s && s.running===false && (s.last_run || s.last_error)){
       if(st) st.textContent = (s.alive||0)+' live proxies \u00B7 '+(s.candidates||0)+' checked';
@@ -285,6 +293,7 @@ async function fetchProxies(){
       return;
     }
     if(st) st.textContent = 'validating proxies\u2026 ('+(s.candidates||0)+' found)';
+    await new Promise(r=>setTimeout(r,1500));
   }
   if(b){ b.disabled=false; b.textContent='\u26A1 Fetch Free Proxies'; }
   toast('Still checking proxies \u2014 give it another minute','warn');

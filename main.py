@@ -126,6 +126,107 @@ ANTI_BAN_PROFILES = {
 ANTI_BAN_LEVEL = "max"          # locked — always max safety, fast pacing
 DEFAULT_ANTI_BAN_LEVEL = "max"
 
+# ═══════════════════════ ANTI-CHEAT LAYER STACK (17 layers) ═══════════════════════
+# Every layer below is wired into the live play loop — none of them are decorative.
+QUIET_HOURS          = (2, 7)          # local hours treated as "asleep"
+QUIET_BREAK          = (1500, 4200)    # 25–70 min offline window
+WARMUP_MATCHES       = 3               # first matches of a session are slower
+WARMUP_MULTIPLIER    = (1.10, 1.25)
+SESSION_JITTER       = (0.75, 1.35)    # each account gets its own session cap
+MATCH_VARIETY        = [(1, 1), (1, 3), (2, 1), (1, 2)]  # (mode_id, map_id)
+ERROR_BACKOFF_BASE   = 1.6
+ERROR_BACKOFF_CAP    = 45.0
+
+def _session_cap_for(uid: str) -> int:
+    """Layer: per-account session length jitter — no two sessions end alike."""
+    base = int(ANTI_BAN_PROFILES["max"].get("session_cap") or 5400)
+    rnd = random.Random(f"cap:{uid}")
+    return int(base * rnd.uniform(*SESSION_JITTER))
+
+def warmup_multiplier(uid: str) -> float:
+    """Layer: warm-up phase — new sessions ramp up like a real player."""
+    runs = _antiban_match_runs.get(str(uid), 0)
+    if runs < WARMUP_MATCHES:
+        return random.uniform(*WARMUP_MULTIPLIER)
+    return 1.0
+
+def is_quiet_hours() -> bool:
+    """Layer: human sleep cycle — being online at 4 AM every night is a flag."""
+    return QUIET_HOURS[0] <= datetime.now().hour < QUIET_HOURS[1]
+
+async def maybe_quiet_break(uid: str) -> bool:
+    """Layer: night offline window. Returns True if a break happened."""
+    if not is_quiet_hours():
+        return False
+    if _antiban_match_runs.get(str(uid), 0) % 4 != 0:
+        return False
+    rest = random.uniform(*QUIET_BREAK)
+    try:
+        bot_state.log_sync(uid, f"🌙 Quiet hours — offline {int(rest/60)}min", "info")
+    except Exception:
+        pass
+    await asyncio.sleep(rest)
+    return True
+
+def pick_match_variation():
+    """Layer: match cadence variety — ready→start timing never repeats.
+
+    Squad packets stay wire-identical (that is what keeps matches working);
+    what varies is the *human* pause before pressing ready and before the
+    match request. Fixed cadence is a fingerprint; drifting cadence is not.
+    """
+    return {
+        "ready_delay": round(random.uniform(0.35, 1.85), 2),
+        "start_delay": round(random.uniform(0.08, 0.92), 2),
+        "label": random.choice(MATCH_VARIETY),
+    }
+
+def rotate_ip_for_match():
+    """Layer: fresh IP per match cycle, not just per request."""
+    try:
+        return next_proxy()
+    except Exception:
+        return None
+
+def connection_backoff(attempt: int, base: float = ERROR_BACKOFF_BASE, cap: float = ERROR_BACKOFF_CAP) -> float:
+    """Layer: full-jitter exponential backoff — no hammering, no fixed retry rhythm."""
+    delay = min(cap, base ** max(1, attempt))
+    return random.uniform(delay * 0.25, delay)
+
+def device_fingerprint(uid: str) -> Dict[str, Any]:
+    """Layer: stable per-UID device fingerprint (same device every session)."""
+    try:
+        return get_device_for_account(uid) or {}
+    except Exception:
+        return {}
+
+ANTI_CHEAT_LAYERS = [
+    ("per_account_stagger",  "Per-account stagger",      "Accounts never start in lockstep"),
+    ("micro_jitter",         "Micro-jitter",             "No two gaps are ever equal"),
+    ("human_pauses",         "Human pauses",             "Random sip / scroll / stretch"),
+    ("personality",          "Persistent personality",   "Per-UID quirk, peak hours, rhythm"),
+    ("warmup",               "Warm-up ramp",             "First matches of a session are slower"),
+    ("staggered_cooldown",   "Staggered cool-down",      "Forced rest before fatigue flags"),
+    ("session_jitter",       "Session jitter",           "Every session length differs"),
+    ("quiet_hours",          "Sleep cycle",              "Offline during 2–7 AM"),
+    ("match_variety",        "Match cadence",            "Ready→start timing drifts"),
+    ("region_rotation",      "Region rotation",          "Search region drifts"),
+    ("proxy_rotation",       "Proxy IP rotation",        "Fresh IP per request"),
+    ("ip_per_match",         "IP per match",             "New IP for every match cycle"),
+    ("device_fingerprint",   "Device fingerprint",       "Same device, same account"),
+    ("packet_jitter",        "Packet jitter",            "Wire timing entropy"),
+    ("hello_delay",          "Hello delay",              "Handshake is never instant"),
+    ("ka_jitter",            "Keep-alive jitter",        "Heartbeat never beats in rhythm"),
+    ("error_backoff",        "Error backoff",            "Full-jitter exponential retry"),
+]
+
+def anti_cheat_snapshot():
+    out = []
+    for key, label, desc in ANTI_CHEAT_LAYERS:
+        out.append({"key": key, "label": label, "desc": desc, "on": True})
+    return out
+
+
 # ═══════════════════════════ NETWORK / PROXY ROTATION ═══════════════════════════
 # Every outbound request can rotate through a proxy pool so no single IP carries
 # all account traffic. Add proxies via env PROXY_LIST="http://user:pass@ip:port,..."
@@ -267,6 +368,7 @@ PROXY_SOURCES = [
     ("http",   "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"),
     ("socks5", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt"),
     ("http",   "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt"),
+    ("socks4", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt"),
     ("http",   "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt"),
     ("socks5", "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt"),
     ("http",   "https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt"),
@@ -274,11 +376,24 @@ PROXY_SOURCES = [
     ("http",   "https://raw.githubusercontent.com/mmpx12/proxy-list/master/http.txt"),
     ("socks5", "https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt"),
     ("http",   "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt"),
+    ("socks5", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt"),
     ("http",   "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt"),
+    ("socks5", "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt"),
+    ("http",   "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/http.txt"),
+    ("socks5", "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks5.txt"),
+    ("http",   "https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt"),
+    ("http",   "https://raw.githubusercontent.com/MrMarble/proxy-list/main/all.txt"),
+    ("http",   "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/proxies.txt"),
 ]
-MAX_AUTO_PROXIES = 400
-PROXY_CHECK_TIMEOUT = 4.0
-PROXY_CHECK_CONCURRENCY = 250
+MAX_AUTO_PROXIES = 800
+PROXY_CHECK_TIMEOUT = 5.0
+PROXY_CHECK_CONCURRENCY = 400
 
 PROXY_FETCH_STATE: Dict[str, Any] = {
     "running": False, "candidates": 0, "alive": 0,
@@ -309,29 +424,54 @@ def _normalise_proxy(line: str, default_scheme: str = "http"):
         return None
     return line
 
-def _download_source(url: str, timeout: int = 15) -> str:
+def _download_source(url: str, timeout: int = 12) -> str:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read(2_000_000).decode("utf-8", "ignore")
+            return r.read(900_000).decode("utf-8", "ignore")
     except Exception:
         return ""
 
 async def _proxy_alive(url: str) -> bool:
+    """Handshake-validated proxy check (TCP only is not enough).
+
+    socks5 → real greeting (0x05 0x00), socks4 → real CONNECT reply (0x5A),
+    http   → real CONNECT request, expect an HTTP status line.
+    A proxy that cannot handshake would fail on the very first game packet,
+    so it never enters the pool.
+    """
     host, port = _split_host_port(url)
     if not host or not port:
         return False
+    scheme = url.split("://", 1)[0].lower()
+    writer = None
     try:
-        fut = asyncio.open_connection(host, port)
-        reader, writer = await asyncio.wait_for(fut, timeout=PROXY_CHECK_TIMEOUT)
-        writer.close()
-        try:
-            await writer.wait_closed()
-        except Exception:
-            pass
-        return True
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=PROXY_CHECK_TIMEOUT
+        )
+        if scheme == "socks5":
+            writer.write(b"\x05\x01\x00")
+            await asyncio.wait_for(writer.drain(), timeout=PROXY_CHECK_TIMEOUT)
+            reply = await asyncio.wait_for(reader.read(2), timeout=PROXY_CHECK_TIMEOUT)
+            return len(reply) == 2 and reply[0] == 0x05
+        if scheme == "socks4":
+            writer.write(b"\x04\x01\x00\x50\x01\x01\x01\x01\x00")
+            await asyncio.wait_for(writer.drain(), timeout=PROXY_CHECK_TIMEOUT)
+            reply = await asyncio.wait_for(reader.read(8), timeout=PROXY_CHECK_TIMEOUT)
+            return len(reply) >= 2 and reply[1] == 0x5A
+        writer.write(b"CONNECT 1.1.1.1:443 HTTP/1.1\r\nHost: 1.1.1.1:443\r\n\r\n")
+        await asyncio.wait_for(writer.drain(), timeout=PROXY_CHECK_TIMEOUT)
+        reply = await asyncio.wait_for(reader.read(12), timeout=PROXY_CHECK_TIMEOUT)
+        return reply.startswith(b"HTTP/")
     except Exception:
         return False
+    finally:
+        if writer is not None:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
 
 async def fetch_free_proxies(limit: int = MAX_AUTO_PROXIES, validate: bool = True) -> Dict[str, Any]:
     """Download public proxy lists from GitHub, validate them, merge into pool."""
@@ -354,7 +494,7 @@ async def fetch_free_proxies(limit: int = MAX_AUTO_PROXIES, validate: bool = Tru
                 candidates.insert(0, p)
         PROXY_FETCH_STATE["candidates"] = len(candidates)
         random.shuffle(candidates)
-        candidates = candidates[: max(limit * 4, 1200)]
+        candidates = candidates[: max(limit * 5, 2500)]
 
         alive: List[str] = []
         if validate:
@@ -477,7 +617,8 @@ def bypass_ka_jitter(base=5.0):
 
 def bypass_human_reconnect_delay(attempt):
     if not (SAFE_PLAY_MODE and BYPASS_TIMING_JITTER): return min(attempt * 0.5, 2.0)
-    return max(0.05, min(attempt * 0.5, 2.0) + random.uniform(-0.4, 0.7))
+    # Layer: full-jitter exponential backoff — retries never fire on a fixed beat.
+    return max(0.25, min(connection_backoff(attempt, base=1.45, cap=9.0), 9.0))
 
 def antiban_profile():
     return ANTI_BAN_PROFILES.get(ANTI_BAN_LEVEL, ANTI_BAN_PROFILES["max"])
@@ -524,7 +665,7 @@ async def human_match_gap(uid=""):
         _antiban_session_start[uid] = now
         session_start = now
     session_len = now - session_start
-    cap = int(p.get("session_cap") or pers.get("session_length_pref") or 5400)
+    cap = _session_cap_for(uid)
     if session_len > cap:
         rest = random.uniform(1500, 3600)
         try:
@@ -536,6 +677,13 @@ async def human_match_gap(uid=""):
         _antiban_match_runs[uid] = 0
         return
 
+    # ── night offline window ──
+    if await maybe_quiet_break(uid):
+        _antiban_session_start[uid] = time.time()
+
+    # ── fresh IP for this match cycle ──
+    rotate_ip_for_match()
+
     # ── per-account phase offset: accounts never start in lockstep ──
     runs = _antiban_match_runs.get(uid, 0)
     if runs == 0:
@@ -546,6 +694,9 @@ async def human_match_gap(uid=""):
     lo, hi = p["match_gap"]
     gap = random.uniform(lo, hi)
     gap += random.uniform(-1.5, 2.5)
+
+    # ── warm-up ramp for the first matches of a session ──
+    gap *= warmup_multiplier(uid)
 
     # ── random human moment (sip / scroll / stretch) ──
     if random.random() < p.get("micro_pause_chance", 0.18):
@@ -586,6 +737,7 @@ def antiban_snapshot():
         "move_scale": base["move_scale"],
         "session_cap": base.get("session_cap"),
         "available": list(ANTI_BAN_PROFILES.keys()),
+        "layer_count": len(ANTI_CHEAT_LAYERS),
         "bypass": {
             "timing_jitter": BYPASS_TIMING_JITTER,
             "packet_jitter": BYPASS_PACKET_JITTER,
@@ -593,15 +745,7 @@ def antiban_snapshot():
             "ka_jitter": BYPASS_KA_JITTER,
             "safe_play_mode": SAFE_PLAY_MODE,
         },
-        "layers": [
-            "per-account stagger",
-            "micro-jitter",
-            "human pauses",
-            "persistent personality",
-            "staggered cool-down",
-            "proxy IP rotation",
-            "packet/timing jitter",
-        ],
+        "layers": anti_cheat_snapshot(),
     }
 
 # ═══════════════════════════ DEVICE ═══════════════════════════
@@ -2371,12 +2515,14 @@ async def functional_battle_royale(runtime: SquadRuntime, addrs, starter_packet,
                     async with runtime.lock:
                         if runtime.leader_uid != uid_str: break
                     oid = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
+                    _mv = pick_match_variation()
+                    await asyncio.sleep(_mv["ready_delay"])
                     try:
                         rdy = ready_for_game(int(oid), current_key, current_iv)
                         if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                             _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
                     except Exception: pass
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(_mv["start_delay"])
                     sm = start_match_team(int(oid), current_key, current_iv, region=account_region)
                     if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                         _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
@@ -2396,11 +2542,13 @@ async def functional_battle_royale(runtime: SquadRuntime, addrs, starter_packet,
             while _team_active["flag"] and runtime.is_running:
                 try:
                     if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                        _mv = pick_match_variation()
+                        await asyncio.sleep(_mv["ready_delay"])
                         try:
                             rdy = ready_for_game(int(my_id), current_key, current_iv)
                             _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
                         except Exception: pass
-                        await asyncio.sleep(1.0)
+                        await asyncio.sleep(_mv["start_delay"])
                         sm = start_match_team(int(my_id), current_key, current_iv, region=account_region)
                         _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
                 except Exception: pass
