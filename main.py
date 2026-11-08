@@ -571,7 +571,7 @@ _accept_friend_request  = True
 DEBUG_TEAM_PACKETS      = False
 
 # ═══════════════════════════ GUILD CONFIG ═══════════════════════════
-GUILD_BASE = "https://danger-guild-management-web.vercel.app"
+GUILD_BASE = os.environ.get("GUILD_BASE", "https://danger-guild-management-web.vercel.app")
 GUILD_JOIN_ENDPOINTS  = [f"{GUILD_BASE}/join"]
 GUILD_LEAVE_ENDPOINTS = [
     f"{GUILD_BASE}/leave", f"{GUILD_BASE}/guild/leave",
@@ -4020,7 +4020,11 @@ async def web_index(request):
     return aioweb.Response(text=HTML_PAGE, content_type="text/html")
 
 async def web_health(request):
-    return aioweb.json_response({"ok": True, "brand": BRAND_NAME, "status": "healthy"})
+    return aioweb.json_response({
+        "ok": True, "brand": BRAND_NAME, "status": "healthy",
+        "guild_api": "danger-guild-management-web.vercel.app",
+        "version": "7.0.0"
+    })
 
 async def web_login(request):
     try:
@@ -4473,6 +4477,7 @@ async def start_web_server():
         app.router.add_get("/", web_index)
         app.router.add_get("/health", web_health)
         app.router.add_get("/healthz", web_health)
+        app.router.add_get("/api/health", web_health)
         app.router.add_post("/api/login", web_login)
         app.router.add_get("/api/status", web_status)
         app.router.add_get("/api/glory", web_glory)
