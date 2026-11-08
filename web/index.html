@@ -346,12 +346,13 @@ hr.sep{border:none;border-top:1px solid var(--stroke);margin:24px 0}
       <input type="password" id="pw" placeholder="Enter admin password" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn-primary" id="loginBtn" onclick="doLogin()">UNLOCK DASHBOARD</button>
-    <div class="login-foot">SQUAD • GUILD • MATCH PLAY • ANTI-BAN</div>
+    <div id="loginStatus" style="margin-top:14px;font-size:13px;text-align:center;color:#7a849a">&#9203; Connecting to server&hellip;</div>
+    <div class="login-foot">SQUAD &bull; GUILD &bull; MATCH PLAY &bull; ANTI-BAN</div>
   </div>
 </div>
 
 <div id="app"></div>
 
-<script src="/static/app.js?v=2"></script>
+<script src="/static/app.js?v=7"></script>
 </body>
 </html>

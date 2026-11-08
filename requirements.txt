@@ -2,8 +2,8 @@ httpx[socks]
 google-play-scraper
 pycryptodome
 protobuf-decoder
-protobuf
+protobuf>=4.25.0
 requests[socks]
-aiohttp
+aiohttp>=3.9.0,<4
 PyJWT
 PySocks

@@ -3675,10 +3675,10 @@ async def web_login(request):
             print_success(f"[LOGIN] success token={tok[:12]}...")
             return _add_cors_headers(aioweb.json_response({"ok": True, "token": tok}))
         print_error(f"[LOGIN] wrong password from {request.remote}")
-        return _add_cors_headers(aioweb.json_response({"ok": False, "error": "Wrong password"}, status=401))
+        return _add_cors_headers(aioweb.json_response({"ok": False, "error": "Wrong password — check ADMIN_PASSWORD"}))
     except Exception as e:
-        print_error(f"[LOGIN] error: {e}")
-        return _add_cors_headers(aioweb.json_response({"ok": False, "error": str(e)}, status=500))
+        print_error(f"[LOGIN] error: {e}\n{traceback.format_exc()}")
+        return _add_cors_headers(aioweb.json_response({"ok": False, "error": f"{type(e).__name__}: {e}"}))
 
 def _require_admin(request):
     if not _check_admin(request):
@@ -4001,12 +4001,43 @@ def _add_cors_headers(resp):
     resp.headers["Access-Control-Allow-Credentials"] = "true"
     return resp
 
+APP_VERSION = "7.0.0"
+APP_BUILD = os.environ.get("RENDER_GIT_COMMIT", os.environ.get("GIT_COMMIT", "local"))
+
+@aioweb.middleware
+async def _error_middleware(request, handler):
+    """Never let a bare 500 escape — always return JSON with the real error."""
+    try:
+        resp = await handler(request)
+        if isinstance(resp, aioweb.Response):
+            _add_cors_headers(resp)
+            p = request.path
+            if p == "/" or p.endswith((".html", ".js", ".css")):
+                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                resp.headers["Pragma"] = "no-cache"
+                resp.headers["Expires"] = "0"
+        return resp
+    except aioweb.HTTPException as ex:
+        _add_cors_headers(ex)
+        return ex
+    except Exception as ex:
+        tb = traceback.format_exc()
+        print_error(f"[500] {request.method} {request.path} -> {ex}\n{tb}")
+        return aioweb.json_response(
+            {"ok": False, "error": f"{type(ex).__name__}: {ex}", "path": request.path},
+            status=500, headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+                "Access-Control-Allow-Headers": "Content-Type, X-Admin-Token, Authorization",
+            },
+        )
+
 async def start_web_server():
     if not _HAS_AIOHTTP:
         print_error("aiohttp not installed! Run: pip install aiohttp")
         return None
     try:
-        app = aioweb.Application()
+        app = aioweb.Application(middlewares=[_error_middleware])
         # Static files
         app.router.add_static('/static/', path=STATIC_DIR, name='static')
         app.router.add_get("/", web_index)
@@ -4032,6 +4063,15 @@ async def start_web_server():
 
         async def handle_ping(request):
             return _add_cors_headers(aioweb.json_response({"ok": True, "brand": BRAND_NAME, "status": "alive"}))
+
+        async def handle_version(request):
+            return _add_cors_headers(aioweb.json_response({
+                "ok": True, "brand": BRAND_NAME, "version": APP_VERSION,
+                "build": APP_BUILD, "python": sys.version.split()[0],
+                "aiohttp": getattr(aioweb, "__version__", "?"),
+                "password_set": "env" if "ADMIN_PASSWORD" in os.environ else "default",
+            }))
+        app.router.add_get("/api/version", handle_version)
         app.router.add_get("/api/ping", handle_ping)
 
         async def handle_options(request):

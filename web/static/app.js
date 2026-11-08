@@ -35,7 +35,7 @@ const TABS = [
   {id:'consoles',  label:'Consoles', icon:'\uD83D\uDCBB'},
 ];
 
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&','<':'<','>':'>','"':'"',"'":'''}[m]));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
 function $id(x){return document.getElementById(x);}
 function initials(name){name=String(name||'?');return name.replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase()||'??';}
 function fmt(n){n=Number(n)||0;return n.toLocaleString('en-IN');}
@@ -45,17 +45,21 @@ async function api(path, opts={}){
   if(token) opts.headers['X-Admin-Token'] = token;
   if(opts.body && typeof opts.body!=='string'){opts.body=JSON.stringify(opts.body);opts.headers['Content-Type']='application/json';}
   const controller = new AbortController();
-  const timeoutId = setTimeout(()=>controller.abort(), 15000);
+  const timeoutId = setTimeout(()=>controller.abort(), 20000);
   opts.signal = controller.signal;
   try{
     const r = await fetch(API+path, opts);
     clearTimeout(timeoutId);
-    const j = await r.json().catch(()=>({ok:false,error:'bad json'}));
-    if(r.status===401){ logout(true); }
+    const raw = await r.text();
+    let j;
+    try { j = JSON.parse(raw); }
+    catch(_) { j = {ok:false, error:'HTTP '+r.status+' — '+raw.slice(0,200)}; }
+    if(r.status===401 && path!=='/api/login'){ logout(true); j.ok=false; j.error=j.error||'Session expired'; }
+    if(!j.ok && !j.error) j.error = 'HTTP '+r.status;
     return j;
   }catch(e){
     clearTimeout(timeoutId);
-    return {ok:false,error:e.name==='AbortError'?'request timeout':'network error'};
+    return {ok:false,error:e.name==='AbortError'?'Server did not respond in 20s':'Cannot reach server: '+e.message};
   }
 }
 
@@ -79,16 +83,47 @@ function confirmBox(title, text){
   });
 }
 
+function setLoginStatus(msg, type){
+  const el = $id('loginStatus');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = type==='ok' ? '#22d17a' : type==='err' ? '#ff4d5e' : '#7a849a';
+}
+
+async function checkServer(){
+  setLoginStatus('\u23F3 Connecting to server\u2026','info');
+  try{
+    const ctl = new AbortController();
+    const t = setTimeout(()=>ctl.abort(), 20000);
+    const r = await fetch(API+'/api/ping', {signal:ctl.signal});
+    clearTimeout(t);
+    if(!r.ok){ setLoginStatus('Server responded HTTP '+r.status,'err'); return; }
+    const j = await r.json();
+    setLoginStatus(j.ok ? '\u2705 Server online — enter password' : 'Server error: '+(j.error||'unknown'), j.ok?'ok':'err');
+  }catch(e){
+    setLoginStatus('\u26D4 Cannot reach server'+(e.name==='AbortError'?' (timeout — free tier waking up, wait 30s and retry)':''),'err');
+  }
+}
+
 async function doLogin(){
   try{
     const pw = $id('pw').value; if(!pw) return toast('Enter the password','warn');
     const btn = $id('loginBtn'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> UNLOCKING\u2026';
+    setLoginStatus('Checking password\u2026','info');
     const r = await api('/api/login',{method:'POST',body:{password:pw}});
     btn.disabled=false; btn.textContent='UNLOCK DASHBOARD';
-    if(r.ok){ token=r.token; localStorage.setItem('ylu_token',token); enterApp(); toast('PREMIUM UNLOCKED — welcome back, boss \uD83C\uDDEE\uD83C\uDDF3','ok'); }
-    else { toast(r.error||'Wrong password','err'); }
+    if(r.ok){
+      token=r.token; localStorage.setItem('ylu_token',token);
+      setLoginStatus('Unlocked','ok');
+      enterApp();
+      toast('PREMIUM UNLOCKED — welcome back, boss \uD83C\uDDEE\uD83C\uDDF3','ok');
+    } else {
+      setLoginStatus('\u26D4 '+(r.error||'Wrong password'),'err');
+      toast(r.error||'Wrong password','err');
+    }
   }catch(e){
     const btn = $id('loginBtn'); if(btn){ btn.disabled=false; btn.textContent='UNLOCK DASHBOARD'; }
+    setLoginStatus('\u26D4 '+String(e),'err');
     toast('Login error: '+String(e),'err');
   }
 }
@@ -267,4 +302,12 @@ async function loadConsole(sid){ const d=await api('/api/squad/logs?squad_id='+s
   box.innerHTML='<div class="console"><div class="console-top"><span class="td t1"></span><span class="td t2"></span><span class="td t3"></span><span class="ttl">yadav@levelup:~/squad-'+sid+'$ tail -f</span></div><div class="console-body" id="consoleBody">'+lines+'<div class="log-line"><span class="m" style="color:var(--txt-dim)">$</span><span class="cursor"></span></div></div></div>'; const body=$id('consoleBody'); if(body) body.scrollTop=body.scrollHeight; }
 
 /* BOOT */
-(async function boot(){ if(token){ const d=await api('/api/status'); if(d.ok){ enterApp(); } else { logout(true); } } else { $id('login').style.display='flex'; } })();
+(async function boot(){
+  if(token){
+    const d = await api('/api/status');
+    if(d.ok){ enterApp(); return; }
+    logout(true);
+  }
+  $id('login').style.display='flex';
+  checkServer();
+})();
