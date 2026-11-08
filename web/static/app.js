@@ -240,12 +240,14 @@ async function renderCreate(){
   $id('content').innerHTML = topbar('Create Squad','Add up to 4 accounts')+'\n    <div class="form-card"><h3>\u2795 New Squad</h3><p class="hint">Enter UID + password for 1\u20134 accounts. Create builds the squad; then hit <b>Start</b> on the dashboard to begin matchmaking.</p>'+rows+'\n    <div class="form-row" style="margin-top:14px"><button class="btn info" onclick="createGuestAccount()" style="background:linear-gradient(135deg,#8b7bff,#5b4bcc);color:#fff;border:none;width:100%">\uD83D\uDC7B Create Guest Account (Auto)</button><span id="guestStatus" style="margin-left:12px;font-size:13px;color:var(--txt-dim);margin-top:8px;display:block"></span></div>\\n    <button class="btn go" style="width:100%;justify-content:center;padding:16px;font-size:16px;margin-top:18px" id="createBtn" onclick="createSquad()">\u2705 Create Squad</button></div>';
 }
 async function createGuestAccount(){
-  const st = $id('guestStatus'); st.textContent = 'Creating guest account via Garena...';
+  const st = $id('guestStatus');
+  if(!st){ toast('Create Squad tab not loaded. Refresh and try again.','err'); return; }
+  st.textContent = 'Creating guest account via Garena...';
   const r = await api('/api/account/guest',{method:'POST'});
   if(r.ok){
     st.textContent = 'Created: '+r.nickname+' (UID: '+r.uid+', Pass: '+r.password+') \u2705';
     toast('Guest account '+r.nickname+' created! Level '+r.level+'.','ok');
-    setTimeout(()=>renderDashboard(false), 800);
+    renderDashboard(false);
   }else{
     st.textContent = 'Failed: '+r.error;
     toast('Guest create failed: '+r.error,'err');
