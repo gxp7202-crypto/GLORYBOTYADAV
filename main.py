@@ -869,6 +869,7 @@ class BotState:
         self.squad_logs: Dict[int, List[dict]] = {}
         self._log_lock = asyncio.Lock()
         self.paused: set = set()
+        self.removed: set = set()   # UIDs removed from dashboard stay gone
         self.refresh_callbacks: dict = {}
         self.guild_jobs: Dict[int, dict] = {}
         self._guild_job_lock = asyncio.Lock()
@@ -913,6 +914,8 @@ class BotState:
 
     def register_account(self, uid, nickname, region, level, exp, likes, password="", slot=0):
         uid = str(uid)
+        if uid in self.removed:
+            return
         cur = self.accounts.get(uid, {})
         self.accounts[uid] = {
             **cur,
@@ -950,6 +953,26 @@ class BotState:
         uid = str(uid)
         if uid in self.accounts:
             self.accounts[uid]["matches"] = self.accounts[uid].get("matches", 0) + 1
+
+    def remove_account(self, uid):
+        """Hard remove: kill the worker, drop every trace, block re-registration."""
+        uid = str(uid)
+        t = self.account_workers.pop(uid, None)
+        if t and not t.done():
+            try:
+                t.cancel()
+            except Exception:
+                pass
+        self.accounts.pop(uid, None)
+        self.account_credentials.pop(uid, None)
+        self.logs.pop(uid, None)
+        self.paused.discard(uid)
+        self.removed.add(uid)
+        return True
+
+    def allow_account(self, uid):
+        """Un-block a UID (used when it is deliberately added again)."""
+        self.removed.discard(str(uid))
 
     def is_paused(self, uid):
         return str(uid) in self.paused
@@ -3370,6 +3393,7 @@ class SquadManager:
             runtime = SquadRuntime(sid)
             uids = []
             for uid, pw in members:
+                bot_state.allow_account(uid)
                 uid = str(uid).strip()
                 pw = str(pw).strip()
                 if not uid or not pw: continue
@@ -4226,6 +4250,34 @@ async def web_squad_remove(request):
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
 
+async def web_account_remove(request):
+    """Hard-remove a UID from the dashboard: stop its worker, detach it from any
+    squad, drop every trace, and block it from re-registering."""
+    chk = _require_admin(request)
+    if chk: return chk
+    try:
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+        uid = str(body.get("uid", "")).strip()
+        if not uid:
+            return aioweb.json_response({"ok": False, "error": "uid required"})
+        detached = []
+        for sid, sq in list(squad_mgr.squads.items()):
+            if uid in [str(u) for u in sq.get("uids", [])]:
+                try:
+                    ok, _msg = await squad_mgr.remove_member(sid, uid)
+                    if ok: detached.append(sid)
+                except Exception:
+                    pass
+        bot_state.remove_account(uid)
+        bot_state.log_sync(uid, "Removed from dashboard by admin", "warning")
+        return aioweb.json_response({"ok": True, "uid": uid, "squads": detached})
+    except Exception as e:
+        return aioweb.json_response({"ok": False, "error": str(e)})
+
 async def web_squad_logs(request):
     chk = _require_admin(request)
     if chk: return chk
@@ -4436,6 +4488,7 @@ async def start_web_server():
         app.router.add_post("/api/squad/stop", web_squad_stop)
         app.router.add_post("/api/squad/delete", web_squad_delete)
         app.router.add_post("/api/squad/remove", web_squad_remove)
+        app.router.add_post("/api/account/remove", web_account_remove)
         app.router.add_get("/api/squad/logs", web_squad_logs)
         app.router.add_post("/api/guild/one", web_guild_one)
         app.router.add_post("/api/guild/run", web_guild_run)
