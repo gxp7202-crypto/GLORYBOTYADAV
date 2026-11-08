@@ -77,7 +77,7 @@ async function doLogin(){
   const btn = $id('loginBtn'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> UNLOCKING\u2026';
   const r = await api('/api/login',{method:'POST',body:{password:pw}});
   btn.disabled=false; btn.textContent='UNLOCK DASHBOARD';
-  if(r.ok){ token=r.token; localStorage.setItem('ylu_token',token); enterApp(); toast('Welcome back, boss \uD83C\uDDEE\uD83C\uDDF3','ok'); }
+  if(r.ok){ token=r.token; localStorage.setItem('ylu_token',token); enterApp(); toast('PREMIUM UNLOCKED — welcome back, boss \uD83C\uDDEE\uD83C\uDDF3','ok'); }
   else { toast(r.error||'Wrong password','err'); }
 }
 
@@ -94,7 +94,7 @@ function logout(silent){
 function enterApp(){
   $id('login').style.display='none';
   const app = $id('app'); app.style.display='block';
-  app.innerHTML = '\n    <div class="mobile-top"><div class="logo">Y</div><div class="nm">'+BRAND+'</div><div class="spacer"></div>\n      <span class="live-pill" style="margin:0" id="mLive"><span class="dot"></span>LIVE</span></div>\n    <div class="shell">\n      <aside class="sidebar">\n        <div class="side-brand"><div class="logo">Y</div><div class="nm">'+BRAND+'<small>ULTRA PREMIUM \uD83C\uDDEE\uD83C\uDDF3</small></div></div>\n        '+TABS.map(t=>'<div class="nav-item" data-tab="'+t.id+'" onclick="switchTab(\''+t.id+'\')"><span class="ni">'+t.icon+'</span>'+t.label+'</div>').join('')+'\n        <div class="side-foot">\n          <div class="live-pill"><span class="dot" id="hLive"></span>ENGINE LIVE</div>\n          <div class="clock" id="clock">--:--:--</div>\n          <button class="btn dng sm" style="width:100%;justify-content:center;margin-top:12px" onclick="logout()">\uD83D\uDEAA Sign out</button>\n        </div>\n      </aside>\n      <main class="main"><div class="live-strip" id="liveStrip"></div><div id="content"></div></main>\n    </div>\n    <nav class="bottom-nav">'+TABS.map(t=>'<div class="bn" data-tab="'+t.id+'" onclick="switchTab(\''+t.id+'\')"><span class="bi">'+t.icon+'</span>'+t.label.split(' ')[0]+'</div>').join('')+'</nav>';
+  app.innerHTML = '\n    <div class="mobile-top"><div class="logo">Y+</div><div class="nm">'+BRAND+'</div><div class="spacer"></div>\n      <span class="live-pill" style="margin:0" id="mLive"><span class="dot"></span>LIVE</span></div>\n    <div class="shell">\n      <aside class="sidebar">\n        <div class="side-brand"><div class="logo">Y+</div><div class="nm">'+BRAND+'<small>ULTRA PREMIUM \uD83C\uDDEE\uD83C\uDDF3</small></div><span class="badge b-success" style="font-size:9px;margin-left:10px">PREMIUM</span></div>\n        '+TABS.map(t=>'<div class="nav-item" data-tab="'+t.id+'" onclick="switchTab(\''+t.id+'\')"><span class="ni">'+t.icon+'</span>'+t.label+'</div>').join('')+'\n        <div class="side-foot">\n          <div class="live-pill"><span class="dot" id="hLive"></span>ENGINE LIVE</div>\n          <div class="clock" id="clock">--:--:--</div>\n          <button class="btn dng sm" style="width:100%;justify-content:center;margin-top:12px" onclick="logout()">\uD83D\uDEAA Sign out</button>\n        </div>\n      </aside>\n      <main class="main"><div class="live-strip" id="liveStrip"></div><div id="content"></div></main>\n    </div>\n    <nav class="bottom-nav">'+TABS.map(t=>'<div class="bn" data-tab="'+t.id+'" onclick="switchTab(\''+t.id+'\')"><span class="bi">'+t.icon+'</span>'+t.label.split(' ')[0]+'</div>').join('')+'</nav>';
   startClock(); startGlobalPoll(); switchTab('dashboard');
 }
 
@@ -120,7 +120,7 @@ function switchTab(t){
 }
 
 function topbar(title, crumb){
-  return '<div class="topbar"><div><h2>'+title+'</h2><div class="crumb">'+crumb+'</div></div><div class="spacer"></div></div>';
+  return '<div class="topbar"><div><h2>'+title+'</h2><div class="crumb">'+crumb+'</div></div><span class="badge b-success" style="font-size:10px">PREMIUM</span><div class="spacer"></div></div>';
 }
 
 function animateTo(el,to){
