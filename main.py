@@ -61,7 +61,7 @@ except Exception:
 # ═══════════════════════════ CONFIG ═══════════════════════════
 WEB_HOST = os.environ.get("HOST", "0.0.0.0")
 WEB_PORT = int(os.environ.get("PORT", 20333))
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "yadav1only")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "YADAV")
 BRAND_WEB_NAME = "YADAV LEVEL UP"
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 STATIC_DIR = os.path.join(WEB_DIR, "static")
