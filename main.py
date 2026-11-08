@@ -3667,7 +3667,8 @@ async def web_health(request):
 async def web_login(request):
     try:
         body = await request.json()
-        if body.get("password") == ADMIN_PASSWORD:
+        pw = str(body.get("password", "")).strip()
+        if pw == ADMIN_PASSWORD:
             tok = secrets.token_hex(24)
             ADMIN_SESSIONS.add(tok)
             return aioweb.json_response({"ok": True, "token": tok})
