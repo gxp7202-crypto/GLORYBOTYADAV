@@ -241,17 +241,13 @@ async function renderCreate(){
   let rows=''; for(let i=1;i<=4;i++){
     rows+='<div class="member-row"><span class="sl">Slot '+i+'</span><input class="inp" id="cuid'+i+'" placeholder="Game UID" inputmode="numeric"><input class="inp" id="cpw'+i+'" type="password" placeholder="Password"></div>';
   }
-  $id('content').innerHTML = topbar('Create Squad','Add up to 4 accounts')+'\n    <div class="form-card"><h3>\u2795 New Squad</h3><p class="hint">Enter UID + password for 1\u20134 accounts. Create builds the squad; then hit <b>Start</b> on the dashboard to begin matchmaking.</p>'+rows+'\n    <div class="form-row" style="margin-top:14px"><button class="btn info" onclick="createGuestAccount()" style="background:linear-gradient(135deg,#8b7bff,#5b4bcc);color:#fff;border:none;width:100%">\uD83D\uDC7B Create Guest Account (Auto)</button><span id="guestStatus" style="margin-left:12px;font-size:13px;color:var(--txt-dim);margin-top:8px;display:block"></span></div>\\n    <button class="btn go" style="width:100%;justify-content:center;padding:16px;font-size:16px;margin-top:18px" id="createBtn" onclick="createSquad()">\u2705 Create Squad</button></div>';
+  $id('content').innerHTML = topbar('Create Squad','Add up to 4 accounts')+'\n    <div class="form-card"><h3>\u2795 New Squad</h3><p class="hint">Enter UID + password for 1\u20134 accounts. Create builds the squad; then hit <b>Start</b> on the dashboard to begin matchmaking.</p>'+rows+'\n    <div class="form-row" style="margin-top:14px"><button class="btn info" onclick="createGuestAccount()" style="background:linear-gradient(135deg,#8b7bff,#5b4bcc);color:#fff;border:none;width:100%">\uD83D\uDC7B Create Guest Account (Auto)</button><span id="guestStatus" style="margin-left:12px;font-size:13px;color:var(--txt-dim);margin-top:8px;display:block"></span></div>\n    <div class="form-row" style="margin-top:14px"><div class="label" style="margin-bottom:6px">Or add existing Guest UID:</div><div class="form-2col"><input class="inp" id="manualGuestUid" placeholder="Guest UID"><input class="inp" id="manualGuestPw" placeholder="Guest Password"></div><button class="btn go" style="width:100%;margin-top:8px" onclick="createManualGuest()">\u2705 Register Guest UID</button></div>\n    <button class="btn go" style="width:100%;justify-content:center;padding:16px;font-size:16px;margin-top:18px" id="createBtn" onclick="createSquad()">\u2705 Create Squad</button></div>';
 }
 async function createGuestAccount(){
   const st = $id('guestStatus');
   if(!st){ toast('Create Squad tab not loaded. Refresh and try again.','err'); return; }
-  const uid = prompt('Enter Guest UID (from Free Fire app → Login as Guest):');
-  if(!uid) return;
-  const pw = prompt('Enter Guest Password (from Free Fire app):');
-  if(!pw) return;
-  st.textContent = 'Validating guest account with Garena...';
-  const r = await api('/api/account/guest',{method:'POST',body:{uid,pw}});
+  st.textContent = 'Auto-creating guest account via Garena OAuth...';
+  const r = await api('/api/account/guest',{method:'POST'});
   if(r.ok){
     st.textContent = 'Created: '+r.nickname+' (UID: '+r.uid+', Pass: '+r.password+') \u2705';
     toast('Guest account '+r.nickname+' created! Level '+r.level+'.','ok');
@@ -259,6 +255,20 @@ async function createGuestAccount(){
   }else{
     st.textContent = 'Failed: '+r.error;
     toast('Guest create failed: '+r.error,'err');
+  }
+}
+
+async function createManualGuest(){
+  const uid = $id('manualGuestUid').value.trim();
+  const pw = $id('manualGuestPw').value.trim();
+  if(!uid||!pw) return toast('UID + Password required','warn');
+  const r = await api('/api/account/guest',{method:'POST',body:{uid,pw}});
+  if(r.ok){
+    toast('Guest '+r.nickname+' registered!','ok');
+    $id('manualGuestUid').value=''; $id('manualGuestPw').value='';
+    renderDashboard(false);
+  }else{
+    toast('Guest register failed: '+r.error,'err');
   }
 }
 

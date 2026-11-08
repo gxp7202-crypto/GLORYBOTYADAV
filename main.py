@@ -4027,7 +4027,8 @@ async def web_health(request):
     })
 
 async def web_create_guest(request):
-    """Create a Free Fire guest account — user creates it in Free Fire app, then pastes UID + password here."""
+    """Create a Free Fire guest account purely from web via Garena OAuth grant endpoint.
+    Tries auto-creation first; if Garena blocks it, falls back to manual UID+password."""
     chk = _require_admin(request)
     if chk: return chk
     try:
@@ -4038,45 +4039,168 @@ async def web_create_guest(request):
             pass
         uid = str(body.get("uid", "")).strip()
         password = str(body.get("password", "")).strip()
-        if not uid or not password:
+
+        # If user provided UID+password, validate and register (manual guest from app)
+        if uid and password:
+            ad = await process_account_uid_pass(uid, password, _skip_cache=True)
+            if not ad:
+                return aioweb.json_response({
+                    "ok": False,
+                    "error": "Invalid UID/Password or Garena rejected. Create a fresh guest account in Free Fire app and try again.",
+                    "uid": uid,
+                })
+            acc_id = str(ad['account_id'])
+            bot_state.register_account(
+                uid=acc_id,
+                nickname=f"Guest_{acc_id[:6]}",
+                region=DEFAULT_REGION,
+                level=ad.get('level', 1),
+                exp=ad.get('exp', 0),
+                likes=ad.get('likes', 0),
+                password=password,
+                slot=0
+            )
+            bot_state.accounts[acc_id]['auth_type'] = 'guest'
+            bot_state.accounts[acc_id]['auth_uid'] = uid
+            bot_state.accounts[acc_id]['auth_password'] = password
+            bot_state.log_sync(acc_id, "Guest account registered via Free Fire app credentials", "success")
             return aioweb.json_response({
-                "ok": False,
-                "error": "UID + Password required. Create a guest account in Free Fire app first (Login → Guest), then paste credentials here.",
+                "ok": True,
+                "uid": acc_id,
+                "nickname": f"Guest_{acc_id[:6]}",
+                "password": password,
+                "level": ad.get('level', 1),
+                "region": ad.get('region', DEFAULT_REGION),
+                "message": "Guest account registered. Add to squad and hit Start to play matches and earn glory.",
             })
 
-        # Validate by running the full login flow
-        ad = await process_account_uid_pass(uid, password, _skip_cache=True)
-        if not ad:
+        # Auto-create via Garena OAuth (no uid/password — server generates account)
+        import uuid
+        device_id = str(uuid.uuid4())
+        grant_url = "https://100067.connect.garena.com/oauth/guest/token/grant"
+
+        param_sets = [
+            {
+                "response_type": "token",
+                "client_type": "2",
+                "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+                "client_id": "100067",
+                "device_id": device_id,
+                "redirect_uri": "https://connect.garena.com/",
+                "scope": "openid profile",
+                "state": device_id,
+            },
+            {
+                "response_type": "token",
+                "client_type": "2",
+                "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+                "client_id": "100067",
+                "device_id": device_id,
+                "grant_type": "client_credentials",
+            },
+            {
+                "response_type": "token",
+                "client_type": "2",
+                "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+                "client_id": "100067",
+                "device_id": device_id,
+                "auth_type": "guest",
+            },
+        ]
+
+        hdrs = {
+            "Host": "100067.connect.garena.com",
+            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12; SM-G998B)",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "close",
+        }
+
+        oid = at = pf = None
+        last_error = ""
+        for params in param_sets:
+            for attempt in range(3):
+                try:
+                    r = await client.post(grant_url, headers=hdrs, data=params)
+                    if r.status_code == 200:
+                        d = r.json()
+                        oid = d.get("open_id") or d.get("uid")
+                        at = d.get("access_token") or d.get("token")
+                        pf = d.get("platform", 4)
+                        if oid and at:
+                            break
+                    elif r.status_code == 429:
+                        await asyncio.sleep(1); continue
+                    else:
+                        try:
+                            err = r.json()
+                            last_error = err.get("error", str(r.status_code))
+                        except Exception:
+                            last_error = str(r.status_code)
+                except Exception as e:
+                    last_error = str(e)[:50]
+                await asyncio.sleep(0.5)
+            if oid and at:
+                break
+
+        if not oid or not at:
             return aioweb.json_response({
                 "ok": False,
-                "error": "Invalid UID/Password or Garena rejected. Create a fresh guest account in Free Fire app and try again.",
-                "uid": uid,
+                "error": f"Auto guest creation blocked by Garena ({last_error or 'error_params'}). "
+                         "Create guest in Free Fire app → Login as Guest → copy UID + Password → paste here.",
             })
 
-        # Step 3: Register in dashboard
+        uid = str(oid)
+        vc = await version_config()
+        if not vc:
+            return aioweb.json_response({"ok": False, "error": "Version config failed"})
+        rel, cv, su = vc
+
+        dev = get_device_for_account(uid)
+        lpd = await build_majorlogin_payload(uid, at, str(pf), cv, dev)
+        if not lpd:
+            return aioweb.json_response({"ok": False, "error": "Login payload build failed"})
+
+        mresp = await send_majorlogin(lpd, rel, su)
+        if mresp is None:
+            return aioweb.json_response({"ok": False, "error": "Major login failed"})
+
+        gl = await send_getlogin(lpd, mresp.url, mresp.token, rel)
+        if gl is None:
+            return aioweb.json_response({"ok": False, "error": "Get login failed"})
+
+        rp, dd = gl
+        acc_id = str(mresp.account_id)
+        level = int(get_proto_field(dd, 6, 1) or 1)
+        exp = int(get_proto_field(dd, 7, 0) or 0)
+        likes = int(get_proto_field(dd, 8, 0) or 0)
+        nick = rp.nickname or get_proto_field(dd, 4, f"Player_{acc_id}")
+        region = mresp.region or get_proto_field(dd, 3, "BD")
+
+        pw = device_id
         bot_state.register_account(
-            uid=str(ad['account_id']),
-            nickname=f"Guest_{str(ad['account_id'])[:6]}",
-            region=DEFAULT_REGION,
-            level=ad.get('level', 1),
-            exp=ad.get('exp', 0),
-            likes=ad.get('likes', 0),
-            password=password,
+            uid=acc_id,
+            nickname=nick,
+            region=region,
+            level=level,
+            exp=exp,
+            likes=likes,
+            password=pw,
             slot=0
         )
-        bot_state.accounts[str(ad['account_id'])]['auth_type'] = 'guest'
-        bot_state.accounts[str(ad['account_id'])]['auth_uid'] = uid
-        bot_state.accounts[str(ad['account_id'])]['auth_password'] = password
-        bot_state.log_sync(str(ad['account_id']), "Guest account registered via Free Fire app credentials", "success")
+        bot_state.accounts[acc_id]['auth_type'] = 'guest'
+        bot_state.accounts[acc_id]['auth_uid'] = uid
+        bot_state.accounts[acc_id]['auth_password'] = pw
+        bot_state.log_sync(acc_id, "Guest account auto-created via Garena OAuth", "success")
 
         return aioweb.json_response({
             "ok": True,
-            "uid": str(ad['account_id']),
-            "nickname": f"Guest_{str(ad['account_id'])[:6]}",
-            "password": password,
-            "level": ad.get('level', 1),
-            "region": ad.get('region', DEFAULT_REGION),
-            "message": "Guest account registered. Add to squad and hit Start to play matches and earn glory.",
+            "uid": acc_id,
+            "nickname": nick,
+            "password": pw,
+            "level": level,
+            "region": region,
+            "message": "Guest account auto-created. Add to squad and hit Start to play matches and earn glory.",
         })
     except Exception as e:
         return aioweb.json_response({"ok": False, "error": str(e)})
